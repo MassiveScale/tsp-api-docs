@@ -1,8 +1,8 @@
-# list
+# List
 
 List widgets
 
-Path: API > DemoService > Widgets > list
+Path: API > Widgets > list
 
 ## HTTP request
 
@@ -30,17 +30,17 @@ Don't supply a request body for this method.
 
 ## Response
 
-`DemoService.WidgetList | DemoService.Error`
+`WidgetList | Error`
 
 | Status code | Type | Description |
 | --- | --- | --- |
-| 200 OK | DemoService.WidgetList | The request has succeeded. |
-| default | DemoService.Error | An error response |
+| 200 OK | WidgetList | The request has succeeded. |
+| default | Error | An error response |
 
 
 ## Signature
 
-`list(top?: int32, filter?: string) => DemoService.WidgetList | DemoService.Error`
+`list(top?: int32, filter?: string) => WidgetList | Error`
 
 ## Parameters
 

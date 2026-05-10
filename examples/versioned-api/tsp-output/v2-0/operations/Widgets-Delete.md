@@ -1,13 +1,15 @@
-# read
+# Delete
 
-Read widgets
+Delete a widget
 
-Path: API > DemoService > Widgets > read
+Version: `v2.0`
+
+Path: API > Widgets > delete
 
 ## HTTP request
 
 ```http
-GET /widgets/{id}
+DELETE /widgets/{id}
 ```
 
 ## Optional query parameters
@@ -27,17 +29,17 @@ Don't supply a request body for this method.
 
 ## Response
 
-`DemoService.Widget | DemoService.Error`
+`void | Error`
 
 | Status code | Type | Description |
 | --- | --- | --- |
-| 200 OK | DemoService.Widget | The request has succeeded. |
-| default | DemoService.Error | An error response |
+| 204 No Content | void | There is no content to send for this request, but the headers may be useful. |
+| default | Error | An error response |
 
 
 ## Signature
 
-`read(id: string) => DemoService.Widget | DemoService.Error`
+`delete(id: string) => void | Error`
 
 ## Parameters
 
@@ -48,26 +50,17 @@ Don't supply a request body for this method.
 
 ### Example 1
 
-Read widgets
+Delete a widget
 
 #### Request
 
 ```http
-GET /widgets/string
+DELETE /widgets/string
 ```
 
 #### Response
 
 ```http
-HTTP/1.1 200 OK
-Content-Type: application/json
-
-{
-  "id": "string",
-  "name": "string",
-  "weight": 0,
-  "color": "red",
-  "size": "Small"
-}
+HTTP/1.1 204 No Content
 ```
 

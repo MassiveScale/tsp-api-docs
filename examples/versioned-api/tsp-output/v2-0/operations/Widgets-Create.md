@@ -1,8 +1,10 @@
-# create
+# Create
 
 Create a widget
 
-Path: API > DemoService > Widgets > create
+Version: `v2.0`
+
+Path: API > Widgets > create
 
 ## HTTP request
 
@@ -22,7 +24,7 @@ No custom request headers are required for this method.
 
 ## Request body
 
-Supply a request body of type `DemoService.Widget`.
+Supply a request body of type `Widget`.
 
 Supported content types: `application/json`
 
@@ -39,23 +41,23 @@ Supported content types: `application/json`
 
 ## Response
 
-`DemoService.Widget | DemoService.Error`
+`Widget | Error`
 
 | Status code | Type | Description |
 | --- | --- | --- |
-| 200 OK | DemoService.Widget | The request has succeeded. |
-| default | DemoService.Error | An error response |
+| 200 OK | Widget | The request has succeeded. |
+| default | Error | An error response |
 
 
 ## Signature
 
-`create(body: DemoService.Widget) => DemoService.Widget | DemoService.Error`
+`create(body: Widget) => Widget | Error`
 
 ## Parameters
 
 | Name | Type | Required | Summary |
 | --- | --- | --- | --- |
-| body | DemoService.Widget | Yes | No summary provided. |
+| body | Widget | Yes | No summary provided. |
 ## Examples
 
 ### Example 1

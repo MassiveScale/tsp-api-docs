@@ -1,16 +1,18 @@
-# AnalyzeResult
+# Analyze Result
 
 Result of analyzing a widget
 
+Version: `v2.0`
+
 Kind: Model
 
-Path: API > DemoService > AnalyzeResult
+Path: API > AnalyzeResult
 
 ## Methods
 
 | Method | Container | Returns | Summary |
 | --- | --- | --- | --- |
-| [analyze](../operations/demo-service-widgets-analyze.md) | DemoService.Widgets | DemoService.AnalyzeResult \| DemoService.Error | Analyze a widget |
+| [analyze](../operations/Widgets-Analyze.md) | Widgets | AnalyzeResult \| Error | Analyze a widget |
 
 ## Properties
 

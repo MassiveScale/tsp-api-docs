@@ -1,8 +1,10 @@
-# update
+# Update
 
 Update a widget
 
-Path: API > DemoService > Widgets > update
+Version: `v2.0`
+
+Path: API > Widgets > update
 
 ## HTTP request
 
@@ -17,14 +19,12 @@ This method does not support query parameters.
 
 ## Request headers
 
-| Name | Type | Required | Summary |
-| --- | --- | --- | --- |
-| If-Match | string | No | No summary provided. |
+No custom request headers are required for this method.
 
 
 ## Request body
 
-Supply a request body of type `DemoService.WidgetMergePatchUpdate`.
+Supply a request body of type `WidgetMergePatchUpdate`.
 
 Supported content types: `application/merge-patch+json`
 
@@ -41,25 +41,24 @@ Supported content types: `application/merge-patch+json`
 
 ## Response
 
-`DemoService.Widget | DemoService.Error`
+`Widget | Error`
 
 | Status code | Type | Description |
 | --- | --- | --- |
-| 200 OK | DemoService.Widget | The request has succeeded. |
-| default | DemoService.Error | An error response |
+| 200 OK | Widget | The request has succeeded. |
+| default | Error | An error response |
 
 
 ## Signature
 
-`update(id: string, ifMatch?: string, body: DemoService.WidgetMergePatchUpdate) => DemoService.Widget | DemoService.Error`
+`update(id: string, body: WidgetMergePatchUpdate) => Widget | Error`
 
 ## Parameters
 
 | Name | Type | Required | Summary |
 | --- | --- | --- | --- |
 | id | string | Yes | No summary provided. |
-| ifMatch | string | No | No summary provided. |
-| body | DemoService.WidgetMergePatchUpdate | Yes | No summary provided. |
+| body | WidgetMergePatchUpdate | Yes | No summary provided. |
 ## Examples
 
 ### Example 1
@@ -70,7 +69,6 @@ Update a widget
 
 ```http
 PATCH /widgets/string
-If-Match: string
 Content-Type: application/merge-patch+json
 
 {

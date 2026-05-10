@@ -38,12 +38,13 @@ describe("tsp-api-docs emitter", () => {
     `);
 
     assert.equal(result.outputs["index.md"], undefined);
-    assert.ok(result.outputs["demo/index.md"].includes("## Resources"));
-    assert.ok(result.outputs["demo/index.md"].includes("getWidget"));
-    assert.ok(result.outputs["demo/operations/demo-get-widget.md"].includes("Return a widget by id."));
-    assert.ok(result.outputs["demo/types/demo-widget.md"].includes("Stable identifier"));
-    assert.ok(result.outputs["demo/index.html"] === undefined);
-    assert.ok(result.outputs["demo/operations/demo-get-widget.html"] === undefined);
+    assert.ok(result.outputs["widget-api/index.md"].includes("## Resources"));
+    assert.ok(result.outputs["widget-api/index.md"].includes("getWidget"));
+    assert.ok(result.outputs["widget-api/operations/Get-Widget.md"].includes("# Get Widget"));
+    assert.ok(result.outputs["widget-api/operations/Get-Widget.md"].includes("Return a widget by id."));
+    assert.ok(result.outputs["widget-api/types/Widget.md"].includes("Stable identifier"));
+    assert.ok(result.outputs["widget-api/index.html"] === undefined);
+    assert.ok(result.outputs["widget-api/operations/Get-Widget.html"] === undefined);
   });
 
   it("emits separate docs for multiple services", async () => {
@@ -66,10 +67,10 @@ describe("tsp-api-docs emitter", () => {
     `);
 
     assert.equal(result.outputs["index.md"], undefined);
-    assert.ok(result.outputs["accounts/index.md"].includes("getUser"));
-    assert.ok(result.outputs["orders/index.md"].includes("getOrder"));
-    assert.ok(result.outputs["accounts/operations/accounts-get-user.md"] !== undefined);
-    assert.ok(result.outputs["orders/operations/orders-get-order.md"] !== undefined);
+    assert.ok(result.outputs["accounts-api/index.md"].includes("getUser"));
+    assert.ok(result.outputs["orders-api/index.md"].includes("getOrder"));
+    assert.ok(result.outputs["accounts-api/operations/Get-User.md"] !== undefined);
+    assert.ok(result.outputs["orders-api/operations/Get-Order.md"] !== undefined);
   });
 
   it("renders the service index when explicitly enabled", async () => {
@@ -84,7 +85,7 @@ describe("tsp-api-docs emitter", () => {
       op getWidget(id: string): Widget;
     `);
 
-    assert.ok(result.outputs["index.md"].includes("[Demo](demo/index.md)"));
+    assert.ok(result.outputs["index.md"].includes("[Widget API](widget-api/index.md)"));
   });
 
   it("renders documentation sets for each service version", async () => {
@@ -135,11 +136,11 @@ describe("tsp-api-docs emitter", () => {
     assert.ok(result.outputs["1-1/index.md"].includes("create"));
     assert.ok(!result.outputs["1-1/index.md"].includes("analyze"));
     assert.ok(result.outputs["2-0/index.md"].includes("analyze"));
-    assert.equal(result.outputs["1-0/types/demo-analyze-result.md"], undefined);
-    assert.ok(result.outputs["2-0/types/demo-analyze-result.md"] !== undefined);
+    assert.equal(result.outputs["1-0/types/Analyze-Result.md"], undefined);
+    assert.ok(result.outputs["2-0/types/Analyze-Result.md"] !== undefined);
     assert.ok(result.outputs["2-0/index.md"].includes("Version: `2.0`"));
-    assert.ok(result.outputs["2-0/types/demo-widget.md"].includes("Version: `2.0`"));
-    assert.ok(result.outputs["2-0/operations/demo-widgets-list.md"].includes("Version: `2.0`"));
+    assert.ok(result.outputs["2-0/types/Widget.md"].includes("Version: `2.0`"));
+    assert.ok(result.outputs["2-0/operations/Widgets-List.md"].includes("Version: `2.0`"));
   });
 
   it("renders version selector groups in root index when enabled", async () => {
@@ -170,9 +171,9 @@ describe("tsp-api-docs emitter", () => {
     `);
 
     assert.ok(result.outputs["index.md"].includes("## Versioned Services"));
-    assert.ok(result.outputs["index.md"].includes("### Demo"));
-    assert.ok(result.outputs["index.md"].includes("| 1.0 | [Demo 1.0](1-0/index.md) |"));
-    assert.ok(result.outputs["index.md"].includes("| 2.0 | [Demo 2.0](2-0/index.md) |"));
+    assert.ok(result.outputs["index.md"].includes("### Widget API"));
+    assert.ok(result.outputs["index.md"].includes("| 1.0 | [Widget API 1.0](1-0/index.md) |"));
+    assert.ok(result.outputs["index.md"].includes("| 2.0 | [Widget API 2.0](2-0/index.md) |"));
   });
 
   it("includes http request and request-response examples on operation pages", async () => {
@@ -202,7 +203,8 @@ describe("tsp-api-docs emitter", () => {
       }
     `);
 
-    const operationPage = result.outputs["demo/operations/demo-widgets-update.md"];
+    const operationPage = result.outputs["widget-api/operations/Widgets-Update.md"];
+    assert.ok(operationPage.includes("# Widgets Update"));
     assert.ok(operationPage.includes("## HTTP request"));
     assert.ok(operationPage.includes("PATCH /widgets/{id}"));
     assert.ok(operationPage.includes("## Request body"));
@@ -239,7 +241,7 @@ describe("tsp-api-docs emitter", () => {
       }
     `);
 
-    const operationPage = result.outputs["demo/operations/demo-widgets-read.md"];
+    const operationPage = result.outputs["widget-api/operations/Widgets-Read.md"];
     assert.ok(operationPage.includes("## Optional query parameters"));
     assert.ok(operationPage.includes("| expand | string | No | No summary provided. |"));
     assert.ok(operationPage.includes("## Request headers"));
@@ -268,14 +270,14 @@ describe("tsp-api-docs emitter", () => {
       }
     `);
 
-    const widgetListPage = result.outputs["demo/types/demo-widget-list.md"];
+    const widgetListPage = result.outputs["relationship-api/types/Widget-List.md"];
     assert.ok(widgetListPage.includes("## Methods"));
-    assert.ok(widgetListPage.includes("| [list](../operations/demo-widgets-list.md) |"));
+    assert.ok(widgetListPage.includes("| [list](../operations/Widgets-List.md) |"));
     assert.ok(widgetListPage.includes("## Properties"));
-    assert.ok(widgetListPage.includes("| items | Demo.Widget[] | Yes | No summary provided. |"));
+    assert.ok(widgetListPage.includes("| items | Widget[] | Yes | No summary provided. |"));
     assert.ok(!widgetListPage.includes("## Relationships"));
     assert.ok(!widgetListPage.includes("### items"));
-    assert.ok(!widgetListPage.includes("| [read](operations/demo-widgets-read.md) |"));
-    assert.ok(!widgetListPage.includes("| [create](operations/demo-widgets-create.md) |"));
+    assert.ok(!widgetListPage.includes("| [read](operations/Widgets-Read.md) |"));
+    assert.ok(!widgetListPage.includes("| [create](operations/Widgets-Create.md) |"));
   });
 });

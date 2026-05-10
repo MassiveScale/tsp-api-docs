@@ -8,22 +8,6 @@
 Version: `{{versionLabel}}`
 
 {{/if}}
-{{#if serviceName}}
-Service namespace: {{serviceName}}
-
-{{/if}}
-## Namespaces
-
-{{#if namespaces.length}}
-| Namespace | Summary |
-| --- | --- |
-{{#each namespaces}}
-| {{mdCell name}} | {{mdCell summaryOrFallback}} |
-{{/each}}
-{{else}}
-No additional namespaces were documented.
-{{/if}}
-
 ## Resources
 
 {{#if types.length}}

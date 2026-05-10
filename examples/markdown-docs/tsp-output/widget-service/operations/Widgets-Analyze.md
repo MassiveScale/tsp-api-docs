@@ -1,8 +1,8 @@
-# analyze
+# Analyze
 
 Analyze a widget
 
-Path: API > DemoService > Widgets > analyze
+Path: API > Widgets > analyze
 
 ## HTTP request
 
@@ -27,17 +27,17 @@ Don't supply a request body for this method.
 
 ## Response
 
-`DemoService.AnalyzeResult | DemoService.Error`
+`AnalyzeResult | Error`
 
 | Status code | Type | Description |
 | --- | --- | --- |
-| 200 OK | DemoService.AnalyzeResult | The request has succeeded. |
-| default | DemoService.Error | An error response |
+| 200 OK | AnalyzeResult | The request has succeeded. |
+| default | Error | An error response |
 
 
 ## Signature
 
-`analyze(id: string) => DemoService.AnalyzeResult | DemoService.Error`
+`analyze(id: string) => AnalyzeResult | Error`
 
 ## Parameters
 

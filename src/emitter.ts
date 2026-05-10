@@ -345,7 +345,7 @@ function collectServiceEntry(
   const operationPages = operations
     .sort((left, right) => left.name.localeCompare(right.name))
     .map((operation) => {
-      const slug = slugify(operation.id);
+      const slug = operationFileName(operation.operation);
       return {
         slug,
         page: buildOperationPage(program, operation.operation, version?.value),
@@ -359,7 +359,7 @@ function collectServiceEntry(
   const typePages = types
     .sort((left, right) => left.name.localeCompare(right.name))
     .map((typeEntry) => {
-      const slug = slugify(typeEntry.id);
+      const slug = toTitleCaseFileName(typeEntry.name);
       return {
         slug,
         page: buildTypePage(program, typeEntry.type, relatedMethodsByTypeId.get(typeEntry.id) ?? [], version?.value),
@@ -371,7 +371,7 @@ function collectServiceEntry(
     title: serviceLabel,
     summary: getSummary(program, serviceNamespace) ?? getDoc(program, serviceNamespace),
     versionLabel: version?.value,
-    serviceName: namespaceName(program, serviceNamespace),
+    serviceName: undefined,
     namespaces: namespaces.map((ns) => ({
       name: namespaceName(program, ns),
       title: namespaceName(program, ns),
@@ -532,7 +532,7 @@ function buildOperationPage(program: Program, operation: Operation, versionLabel
   const httpOperation = resolveHttpOperation(program, operation);
 
   return {
-    title: operation.name,
+    title: toTitleCaseLabel(operation.name),
     summary,
     deprecated: getDeprecated(program, operation),
     versionLabel,
@@ -638,7 +638,7 @@ function buildTypePage(
 
   if (type.kind === "Model") {
     return {
-      title: type.name,
+      title: toTitleCaseLabel(type.name),
       summary,
       deprecated: getDeprecated(program, type),
       versionLabel,
@@ -656,7 +656,7 @@ function buildTypePage(
 
   if (type.kind === "Union") {
     return {
-      title: type.name ?? "union",
+      title: toTitleCaseLabel(type.name ?? "union"),
       summary,
       deprecated: getDeprecated(program, type),
       versionLabel,
@@ -674,7 +674,7 @@ function buildTypePage(
 
   if (type.kind === "Enum") {
     return {
-      title: type.name,
+      title: toTitleCaseLabel(type.name),
       summary,
       deprecated: getDeprecated(program, type),
       versionLabel,
@@ -691,7 +691,7 @@ function buildTypePage(
   }
 
   return {
-    title: type.name,
+    title: toTitleCaseLabel(type.name),
     summary,
     deprecated: getDeprecated(program, type),
     versionLabel,
@@ -1147,23 +1147,18 @@ function formatParametersSignature(program: Program, model: Model): string {
 
 function containerLabel(program: Program, operation: Operation): string {
   if (operation.interface) {
-    const namespace = operation.interface.namespace ? `${namespaceName(program, operation.interface.namespace)}.` : "";
-    return `${namespace}${operation.interface.name}`;
+    return operation.interface.name;
   }
 
   if (operation.namespace && !isGlobalNamespace(program, operation.namespace)) {
-    return namespaceName(program, operation.namespace);
+    return "Service";
   }
 
-  return "Global";
+  return "Service";
 }
 
 function breadcrumbsForOperation(program: Program, operation: Operation): string[] {
   const crumbs = ["API"];
-
-  if (operation.namespace && !isGlobalNamespace(program, operation.namespace)) {
-    crumbs.push(namespaceName(program, operation.namespace));
-  }
 
   if (operation.interface) {
     crumbs.push(operation.interface.name);
@@ -1175,10 +1170,6 @@ function breadcrumbsForOperation(program: Program, operation: Operation): string
 
 function breadcrumbsForType(program: Program, type: Model | Enum | Union | Scalar): string[] {
   const crumbs = ["API"];
-
-  if (type.namespace && !isGlobalNamespace(program, type.namespace)) {
-    crumbs.push(namespaceName(program, type.namespace));
-  }
 
   if (type.kind === "Union" && !type.name) {
     crumbs.push("union");
@@ -1198,12 +1189,7 @@ function namespaceName(program: Program, namespace: Namespace): string {
 }
 
 function describeNamespace(program: Program, namespace: Namespace, fallback: string): string {
-  const serviceName = namespaceName(program, namespace);
-  if (serviceName === "Global") {
-    return fallback;
-  }
-
-  return serviceName;
+  return fallback;
 }
 
 function entityId(program: Program, entity: Type): string {
@@ -1232,12 +1218,12 @@ function typeReference(program: Program, type: Type): string {
       return `[${type.values.map((item) => typeReference(program, item)).join(", ")}]`;
     case "Union":
       if (type.name) {
-        return getTypeName(type);
+        return type.name;
       }
       return [...type.variants.values()].map((variant) => typeReference(program, variant.type)).join(" | ");
     case "Model":
       if (type.name) {
-        return getTypeName(type);
+        return type.name;
       }
       if (isArrayModelType(program, type)) {
         const valueType = type.indexer?.value ?? [...type.properties.values()][0]?.type;
@@ -1250,6 +1236,10 @@ function typeReference(program: Program, type: Type): string {
       return `{ ${[...type.properties.values()]
         .map((property) => `${property.name}${property.optional ? "?" : ""}: ${typeReference(program, property.type)}`)
         .join("; ")} }`;
+    case "Enum":
+      return type.name;
+    case "Scalar":
+      return type.name;
     default:
       return getTypeName(type);
   }
@@ -1279,6 +1269,50 @@ function slugify(value: string): string {
     .toLowerCase();
 
   return slug || "index";
+}
+
+function operationFileName(operation: Operation): string {
+  const segments: string[] = [];
+  if (operation.interface?.name) {
+    segments.push(operation.interface.name);
+  }
+  segments.push(operation.name);
+  return toTitleCaseFileName(segments.join(" "));
+}
+
+function toTitleCaseFileName(value: string): string {
+  const words = splitIdentifierWords(value);
+  if (words.length === 0) {
+    return "Index";
+  }
+
+  return words.map((word) => capitalizeWord(word)).join("-");
+}
+
+function toTitleCaseLabel(value: string): string {
+  const words = splitIdentifierWords(value);
+  if (words.length === 0) {
+    return value;
+  }
+
+  return words.map((word) => capitalizeWord(word)).join(" ");
+}
+
+function splitIdentifierWords(value: string): string[] {
+  return value
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/[^a-zA-Z0-9]+/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter((part) => part.length > 0);
+}
+
+function capitalizeWord(word: string): string {
+  if (word.length === 0) {
+    return word;
+  }
+
+  return `${word.charAt(0).toUpperCase()}${word.slice(1).toLowerCase()}`;
 }
 
 function escapeMarkdownCell(value: string): string {

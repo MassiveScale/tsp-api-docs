@@ -1,22 +1,24 @@
-# WidgetList
+# Widget List
 
 List of widgets
 
+Version: `v2.0`
+
 Kind: Model
 
-Path: API > DemoService > WidgetList
+Path: API > WidgetList
 
 ## Methods
 
 | Method | Container | Returns | Summary |
 | --- | --- | --- | --- |
-| [list](../operations/demo-service-widgets-list.md) | DemoService.Widgets | DemoService.WidgetList \| DemoService.Error | List widgets |
+| [list](../operations/Widgets-List.md) | Widgets | WidgetList \| Error | List widgets |
 
 ## Properties
 
 | Name | Type | Required | Summary |
 | --- | --- | --- | --- |
-| items | DemoService.Widget[] | Yes | Array of widgets |
+| items | Array | Yes | Array of widgets |
 ## JSON representation
 
 ```json
