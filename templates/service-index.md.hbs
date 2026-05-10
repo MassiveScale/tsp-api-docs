@@ -6,10 +6,10 @@
 {{#each versionedServices}}
 ### {{name}}
 
-| Version | Docs | Summary |
-| --- | --- | --- |
+| Version  | Summary |
+| --- |  --- |
 {{#each versions}}
-| {{version}} | [{{title}}]({{path}}) | {{summaryOrFallback}} |
+| [{{version}}]({{path}}) | {{summaryOrFallback}} |
 {{/each}}
 
 {{/each}}

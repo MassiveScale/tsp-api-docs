@@ -2,17 +2,15 @@
 
 TypeSpec emitter for generating API reference documentation in Markdown.
 
-The generated docs follow a Microsoft Graph-style reference structure with service indexes, operation pages, and type pages.
+Supports multiple output formats targeting Azure DevOps Wiki, GitHub, and DocFx.
 
 ## Features
 
-- Emits Markdown docs.
+- Emits Markdown docs with per-service overview pages, per-operation pages, and per-type pages (models, enums, unions, scalars).
+- Three output formats: `azure-devops` (default), `github`, and `docfx`.
 - Uses external Handlebars templates from `templates/*.hbs`.
-- Generates:
-  - Root API index
-  - Per-service overview pages
-  - Per-operation pages
-  - Per-type pages (models, enums, unions, scalars)
+- Optional root service index page.
+- Versioned API support via `@typespec/versioning`.
 
 ## Prerequisites
 
@@ -40,46 +38,89 @@ npm test
 
 ## Emitter Usage
 
-Use the emitter name `tsp-api-docs` in your TypeSpec config.
-
-Supported emitter options:
-- `emitter-output-dir`: custom output directory
-- `page-title-prefix`: optional fallback title prefix
-
-Example config snippet:
+Add the emitter to your TypeSpec config and set options as needed.
 
 ```yaml
 emit:
-  - tsp-api-docs
+  - "@massivescale/tsp-api-docs"
 options:
-  tsp-api-docs:
+  "@massivescale/tsp-api-docs":
     emitter-output-dir: ./tsp-output
+    format: azure-devops
 ```
 
-## Output Structure
+### Options
 
-Typical output layout:
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `emitter-output-dir` | `string` | `./tsp-output` | Output directory for generated files. |
+| `format` | `"azure-devops"` \| `"github"` \| `"docfx"` | `"azure-devops"` | Output format. See [Output Formats](#output-formats) below. |
+| `page-title-prefix` | `string` | — | Fallback title prefix used when the service has no explicit title. |
+| `render-service-index` | `boolean` | `false` | Emit a root index page listing all services. |
+
+## Output Formats
+
+### `azure-devops` (default)
+
+Generates structure compatible with **Azure DevOps Wiki**. Each folder's default landing page has the same name as the folder, which Azure DevOps Wiki renders when a folder node is selected.
 
 ```text
 tsp-output/
-  tsp-api-docs/
-    index.md
-    <service-slug>/
-      index.md
-      operations/
-        <operation>.md
-      types/
-        <type>.md
+  index.md                          # root index (render-service-index: true)
+  <service-slug>/
+    <service-slug>.md               # overview — same name as folder
+    operations/
+      operations.md                 # sub-folder index
+      <Operation>.md
+    types/
+      types.md                      # sub-folder index
+      <Type>.md
+```
+
+### `github`
+
+Generates structure compatible with **GitHub** rendering. Each folder's landing page is `README.md`, which GitHub renders automatically when browsing directories.
+
+```text
+tsp-output/
+  README.md                         # root index (render-service-index: true)
+  <service-slug>/
+    README.md                       # overview
+    operations/
+      README.md                     # sub-folder index
+      <Operation>.md
+    types/
+      README.md                     # sub-folder index
+      <Type>.md
+```
+
+### `docfx`
+
+Generates structure compatible with a **DocFx** project. Each service folder contains an `index.md` overview and a `toc.yml` table of contents for navigation. When `render-service-index: true`, a root `toc.yml` is also emitted.
+
+```text
+tsp-output/
+  index.md                          # root index (render-service-index: true)
+  toc.yml                           # root TOC (render-service-index: true)
+  <service-slug>/
+    index.md                        # overview
+    toc.yml                         # service TOC (Overview / Operations / Types)
+    operations/
+      <Operation>.md
+    types/
+      <Type>.md
 ```
 
 ## Templates
 
-Templates are external `.hbs` files in:
+Templates are external Handlebars files and can be customized:
 
-- `templates/overview.md.hbs`
-- `templates/operation.md.hbs`
-- `templates/type.md.hbs`
-- `templates/service-index.md.hbs`
+- `templates/overview.md.hbs` — service overview page
+- `templates/operation.md.hbs` — operation reference page
+- `templates/type.md.hbs` — type reference page
+- `templates/service-index.md.hbs` — root service index
+- `templates/operations-index.md.hbs` — operations sub-folder index
+- `templates/types-index.md.hbs` — types sub-folder index
 
 ## Development Notes
 
@@ -87,4 +128,5 @@ Templates are external `.hbs` files in:
 - Emitter option schema: `src/lib.ts`
 - Template loader: `src/templates.ts`
 - Tests: `test/emitter.test.js`
+- Example TypeSpec projects: `examples/`
 - Project-specific Copilot guidance: `.github/copilot-instructions.md`

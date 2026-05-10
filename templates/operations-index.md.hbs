@@ -1,0 +1,11 @@
+# Operations
+
+{{#if operations.length}}
+| Method | Container | Returns | Summary |
+| --- | --- | --- | --- |
+{{#each operations}}
+| [{{mdCell name}}]({{path}}) | {{mdCell containerLabel}} | {{mdCell returnType}} | {{mdCell summaryOrFallback}} |
+{{/each}}
+{{else}}
+No operations were found.
+{{/if}}

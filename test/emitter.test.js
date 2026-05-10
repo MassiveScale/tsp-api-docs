@@ -16,164 +16,246 @@ const versionedTester = createTester(resolvePath(fileURLToPath(import.meta.url),
   libraries: ["@massivescale/tsp-api-docs", "@typespec/http", "@typespec/versioning"],
 }).importLibraries();
 
+const widgetSource = `
+  @service(#{ title: "Widget API" })
+  namespace Demo;
+
+  @summary("A widget returned by the service.")
+  model Widget {
+    @summary("Stable identifier")
+    id: string;
+
+    @summary("Display name")
+    name?: string;
+  }
+
+  @summary("Return a widget by id.")
+  @doc("Reads a single widget resource.")
+  @returnsDoc("The requested widget.")
+  op getWidget(@doc("The widget identifier.") id: string): Widget;
+`;
+
 describe("tsp-api-docs emitter", () => {
-  it("generates markdown reference pages", async () => {
-    const result = await tester.emit("@massivescale/tsp-api-docs").compile(`
-      @service(#{ title: "Widget API" })
-      namespace Demo;
+  describe("azure-devops format (default)", () => {
+    it("generates markdown reference pages with folder-named index files", async () => {
+      const result = await tester.emit("@massivescale/tsp-api-docs").compile(widgetSource);
 
-      @summary("A widget returned by the service.")
-      model Widget {
-        @summary("Stable identifier")
-        id: string;
+      assert.equal(result.outputs["index.md"], undefined);
+      assert.ok(result.outputs["widget-api/widget-api.md"].includes("## Resources"));
+      assert.ok(result.outputs["widget-api/widget-api.md"].includes("getWidget"));
+      assert.ok(result.outputs["widget-api/operations/Get-Widget.md"].includes("# Get Widget"));
+      assert.ok(result.outputs["widget-api/operations/Get-Widget.md"].includes("Return a widget by id."));
+      assert.ok(result.outputs["widget-api/types/Widget.md"].includes("Stable identifier"));
+      assert.equal(result.outputs["widget-api/index.html"], undefined);
+      assert.equal(result.outputs["widget-api/operations/Get-Widget.html"], undefined);
+    });
 
-        @summary("Display name")
-        name?: string;
-      }
+    it("generates sub-folder index files named after the folder", async () => {
+      const result = await tester.emit("@massivescale/tsp-api-docs").compile(widgetSource);
 
-      @summary("Return a widget by id.")
-      @doc("Reads a single widget resource.")
-      @returnsDoc("The requested widget.")
-      op getWidget(@doc("The widget identifier.") id: string): Widget;
-    `);
+      assert.ok(result.outputs["widget-api/operations/operations.md"].includes("# Operations"));
+      assert.ok(result.outputs["widget-api/operations/operations.md"].includes("getWidget"));
+      assert.ok(result.outputs["widget-api/types/types.md"].includes("# Types"));
+      assert.ok(result.outputs["widget-api/types/types.md"].includes("Widget"));
+    });
 
-    assert.equal(result.outputs["index.md"], undefined);
-    assert.ok(result.outputs["widget-api/index.md"].includes("## Resources"));
-    assert.ok(result.outputs["widget-api/index.md"].includes("getWidget"));
-    assert.ok(result.outputs["widget-api/operations/Get-Widget.md"].includes("# Get Widget"));
-    assert.ok(result.outputs["widget-api/operations/Get-Widget.md"].includes("Return a widget by id."));
-    assert.ok(result.outputs["widget-api/types/Widget.md"].includes("Stable identifier"));
-    assert.ok(result.outputs["widget-api/index.html"] === undefined);
-    assert.ok(result.outputs["widget-api/operations/Get-Widget.html"] === undefined);
-  });
+    it("emits separate docs for multiple services", async () => {
+      const result = await tester.emit("@massivescale/tsp-api-docs").compile(`
+        @service(#{ title: "Accounts API" })
+        namespace Accounts {
+          model User {
+            id: string;
+          }
+          op getUser(id: string): User;
+        }
 
-  it("emits separate docs for multiple services", async () => {
-    const result = await tester.emit("@massivescale/tsp-api-docs").compile(`
-      @service(#{ title: "Accounts API" })
-      namespace Accounts {
-        model User {
+        @service(#{ title: "Orders API" })
+        namespace Orders {
+          model Order {
+            id: string;
+          }
+          op getOrder(id: string): Order;
+        }
+      `);
+
+      assert.equal(result.outputs["index.md"], undefined);
+      assert.ok(result.outputs["accounts-api/accounts-api.md"].includes("getUser"));
+      assert.ok(result.outputs["orders-api/orders-api.md"].includes("getOrder"));
+      assert.ok(result.outputs["accounts-api/operations/Get-User.md"] !== undefined);
+      assert.ok(result.outputs["orders-api/operations/Get-Order.md"] !== undefined);
+    });
+
+    it("renders the service index when explicitly enabled", async () => {
+      const result = await tester.emit("@massivescale/tsp-api-docs", { "render-service-index": true }).compile(`
+        @service(#{ title: "Widget API" })
+        namespace Demo;
+
+        model Widget {
           id: string;
         }
-        op getUser(id: string): User;
-      }
 
-      @service(#{ title: "Orders API" })
-      namespace Orders {
-        model Order {
-          id: string;
+        op getWidget(id: string): Widget;
+      `);
+
+      assert.ok(result.outputs["index.md"].includes("[Widget API](widget-api/widget-api.md)"));
+    });
+
+    it("renders documentation sets for each service version", async () => {
+      const result = await versionedTester.emit("@massivescale/tsp-api-docs").compile(`
+        import "@typespec/http";
+        import "@typespec/versioning";
+
+        using Http;
+        using Versioning;
+
+        @versioned(Versions)
+        @service(#{ title: "Widget API" })
+        namespace Demo;
+
+        enum Versions {
+          v1_0: "1.0",
+          v1_1: "1.1",
+          v2_0: "2.0",
         }
-        op getOrder(id: string): Order;
-      }
-    `);
 
-    assert.equal(result.outputs["index.md"], undefined);
-    assert.ok(result.outputs["accounts-api/index.md"].includes("getUser"));
-    assert.ok(result.outputs["orders-api/index.md"].includes("getOrder"));
-    assert.ok(result.outputs["accounts-api/operations/Get-User.md"] !== undefined);
-    assert.ok(result.outputs["orders-api/operations/Get-Order.md"] !== undefined);
-  });
+        model Widget {
+          id: string;
+          @added(Versions.v1_1)
+          name: string;
+        }
 
-  it("renders the service index when explicitly enabled", async () => {
-    const result = await tester.emit("@massivescale/tsp-api-docs", { "render-service-index": true }).compile(`
-      @service(#{ title: "Widget API" })
-      namespace Demo;
-
-      model Widget {
-        id: string;
-      }
-
-      op getWidget(id: string): Widget;
-    `);
-
-    assert.ok(result.outputs["index.md"].includes("[Widget API](widget-api/index.md)"));
-  });
-
-  it("renders documentation sets for each service version", async () => {
-    const result = await versionedTester.emit("@massivescale/tsp-api-docs").compile(`
-      import "@typespec/http";
-      import "@typespec/versioning";
-
-      using Http;
-      using Versioning;
-
-      @versioned(Versions)
-      @service(#{ title: "Widget API" })
-      namespace Demo;
-
-      enum Versions {
-        v1_0: "1.0",
-        v1_1: "1.1",
-        v2_0: "2.0",
-      }
-
-      model Widget {
-        id: string;
-        @added(Versions.v1_1)
-        name: string;
-      }
-
-      @added(Versions.v2_0)
-      model AnalyzeResult {
-        id: string;
-      }
-
-      @route("/widgets")
-      interface Widgets {
-        @get list(): Widget;
-        @added(Versions.v1_1)
-        @post create(@body body: Widget): Widget;
         @added(Versions.v2_0)
-        @route("{id}/analyze")
-        @post analyze(@path id: string): AnalyzeResult;
-      }
-    `);
+        model AnalyzeResult {
+          id: string;
+        }
 
-    assert.ok(result.outputs["1-0/index.md"] !== undefined);
-    assert.ok(result.outputs["1-1/index.md"] !== undefined);
-    assert.ok(result.outputs["2-0/index.md"] !== undefined);
-    assert.ok(result.outputs["1-0/index.md"].includes("list"));
-    assert.ok(!result.outputs["1-0/index.md"].includes("create"));
-    assert.ok(result.outputs["1-1/index.md"].includes("create"));
-    assert.ok(!result.outputs["1-1/index.md"].includes("analyze"));
-    assert.ok(result.outputs["2-0/index.md"].includes("analyze"));
-    assert.equal(result.outputs["1-0/types/Analyze-Result.md"], undefined);
-    assert.ok(result.outputs["2-0/types/Analyze-Result.md"] !== undefined);
-    assert.ok(result.outputs["2-0/index.md"].includes("Version: `2.0`"));
-    assert.ok(result.outputs["2-0/types/Widget.md"].includes("Version: `2.0`"));
-    assert.ok(result.outputs["2-0/operations/Widgets-List.md"].includes("Version: `2.0`"));
+        @route("/widgets")
+        interface Widgets {
+          @get list(): Widget;
+          @added(Versions.v1_1)
+          @post create(@body body: Widget): Widget;
+          @added(Versions.v2_0)
+          @route("{id}/analyze")
+          @post analyze(@path id: string): AnalyzeResult;
+        }
+      `);
+
+      assert.ok(result.outputs["1-0/1-0.md"] !== undefined);
+      assert.ok(result.outputs["1-1/1-1.md"] !== undefined);
+      assert.ok(result.outputs["2-0/2-0.md"] !== undefined);
+      assert.ok(result.outputs["1-0/1-0.md"].includes("list"));
+      assert.ok(!result.outputs["1-0/1-0.md"].includes("create"));
+      assert.ok(result.outputs["1-1/1-1.md"].includes("create"));
+      assert.ok(!result.outputs["1-1/1-1.md"].includes("analyze"));
+      assert.ok(result.outputs["2-0/2-0.md"].includes("analyze"));
+      assert.equal(result.outputs["1-0/types/Analyze-Result.md"], undefined);
+      assert.ok(result.outputs["2-0/types/Analyze-Result.md"] !== undefined);
+      assert.ok(result.outputs["2-0/2-0.md"].includes("Version: `2.0`"));
+      assert.ok(result.outputs["2-0/types/Widget.md"].includes("Version: `2.0`"));
+      assert.ok(result.outputs["2-0/operations/Widgets-List.md"].includes("Version: `2.0`"));
+    });
+
+    it("renders version selector groups in root index when enabled", async () => {
+      const result = await versionedTester.emit("@massivescale/tsp-api-docs", { "render-service-index": true }).compile(`
+        import "@typespec/http";
+        import "@typespec/versioning";
+
+        using Http;
+        using Versioning;
+
+        @versioned(Versions)
+        @service(#{ title: "Widget API" })
+        namespace Demo;
+
+        enum Versions {
+          v1_0: "1.0",
+          v2_0: "2.0",
+        }
+
+        model Widget {
+          id: string;
+        }
+
+        @route("/widgets")
+        interface Widgets {
+          @get list(): Widget;
+        }
+      `);
+
+      assert.ok(result.outputs["index.md"].includes("## Versioned Services"));
+      assert.ok(result.outputs["index.md"].includes("### Widget API"));
+      assert.ok(result.outputs["index.md"].includes("| 1.0 | [Widget API 1.0](1-0/1-0.md) |"));
+      assert.ok(result.outputs["index.md"].includes("| 2.0 | [Widget API 2.0](2-0/2-0.md) |"));
+    });
   });
 
-  it("renders version selector groups in root index when enabled", async () => {
-    const result = await versionedTester.emit("@massivescale/tsp-api-docs", { "render-service-index": true }).compile(`
-      import "@typespec/http";
-      import "@typespec/versioning";
+  describe("github format", () => {
+    it("generates README.md as the index file at every level", async () => {
+      const result = await tester.emit("@massivescale/tsp-api-docs", { format: "github" }).compile(widgetSource);
 
-      using Http;
-      using Versioning;
+      assert.equal(result.outputs["index.md"], undefined);
+      assert.ok(result.outputs["widget-api/README.md"].includes("## Resources"));
+      assert.ok(result.outputs["widget-api/README.md"].includes("getWidget"));
+      assert.ok(result.outputs["widget-api/operations/README.md"].includes("# Operations"));
+      assert.ok(result.outputs["widget-api/operations/README.md"].includes("getWidget"));
+      assert.ok(result.outputs["widget-api/types/README.md"].includes("# Types"));
+      assert.ok(result.outputs["widget-api/types/README.md"].includes("Widget"));
+      assert.ok(result.outputs["widget-api/operations/Get-Widget.md"].includes("# Get Widget"));
+      assert.ok(result.outputs["widget-api/types/Widget.md"].includes("Stable identifier"));
+    });
 
-      @versioned(Versions)
-      @service(#{ title: "Widget API" })
-      namespace Demo;
+    it("renders the service index as README.md when enabled", async () => {
+      const result = await tester.emit("@massivescale/tsp-api-docs", { format: "github", "render-service-index": true }).compile(`
+        @service(#{ title: "Widget API" })
+        namespace Demo;
 
-      enum Versions {
-        v1_0: "1.0",
-        v2_0: "2.0",
-      }
+        model Widget {
+          id: string;
+        }
 
-      model Widget {
-        id: string;
-      }
+        op getWidget(id: string): Widget;
+      `);
 
-      @route("/widgets")
-      interface Widgets {
-        @get list(): Widget;
-      }
-    `);
+      assert.ok(result.outputs["README.md"].includes("[Widget API](widget-api/README.md)"));
+      assert.equal(result.outputs["index.md"], undefined);
+    });
+  });
 
-    assert.ok(result.outputs["index.md"].includes("## Versioned Services"));
-    assert.ok(result.outputs["index.md"].includes("### Widget API"));
-    assert.ok(result.outputs["index.md"].includes("| 1.0 | [Widget API 1.0](1-0/index.md) |"));
-    assert.ok(result.outputs["index.md"].includes("| 2.0 | [Widget API 2.0](2-0/index.md) |"));
+  describe("docfx format", () => {
+    it("generates index.md and toc.yml for each service", async () => {
+      const result = await tester.emit("@massivescale/tsp-api-docs", { format: "docfx" }).compile(widgetSource);
+
+      assert.equal(result.outputs["index.md"], undefined);
+      assert.ok(result.outputs["widget-api/index.md"].includes("## Resources"));
+      assert.ok(result.outputs["widget-api/index.md"].includes("getWidget"));
+      assert.ok(result.outputs["widget-api/toc.yml"].includes("- name: Overview"));
+      assert.ok(result.outputs["widget-api/toc.yml"].includes("href: index.md"));
+      assert.ok(result.outputs["widget-api/toc.yml"].includes("- name: Operations"));
+      assert.ok(result.outputs["widget-api/toc.yml"].includes("href: operations/Get-Widget.md"));
+      assert.ok(result.outputs["widget-api/toc.yml"].includes("- name: Types"));
+      assert.ok(result.outputs["widget-api/toc.yml"].includes("href: types/Widget.md"));
+      assert.ok(result.outputs["widget-api/operations/Get-Widget.md"].includes("# Get Widget"));
+      assert.ok(result.outputs["widget-api/types/Widget.md"].includes("Stable identifier"));
+      assert.equal(result.outputs["widget-api/operations/operations.md"], undefined);
+      assert.equal(result.outputs["widget-api/types/types.md"], undefined);
+    });
+
+    it("renders index.md and toc.yml at root when service index is enabled", async () => {
+      const result = await tester.emit("@massivescale/tsp-api-docs", { format: "docfx", "render-service-index": true }).compile(`
+        @service(#{ title: "Widget API" })
+        namespace Demo;
+
+        model Widget {
+          id: string;
+        }
+
+        op getWidget(id: string): Widget;
+      `);
+
+      assert.ok(result.outputs["index.md"].includes("[Widget API](widget-api/index.md)"));
+      assert.ok(result.outputs["toc.yml"].includes("- name: Widget API"));
+      assert.ok(result.outputs["toc.yml"].includes("href: widget-api/index.md"));
+    });
   });
 
   it("includes http request and request-response examples on operation pages", async () => {

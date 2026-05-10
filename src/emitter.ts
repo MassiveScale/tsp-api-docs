@@ -36,12 +36,14 @@ import { unsafe_mutateSubgraphWithNamespace } from "@typespec/compiler/experimen
 import { getHttpOperation, type HttpOperation, type HttpOperationResponse, type HttpStatusCodeRange } from "@typespec/http";
 import { getVersioningMutators, type Version } from "@typespec/versioning";
 import * as HandlebarsModule from "handlebars";
-import type { ApiDocsEmitterOptions } from "./lib.js";
+import type { ApiDocsEmitterOptions, OutputFormat } from "./lib.js";
 import {
   operationMarkdownTemplate,
+  operationsIndexMarkdownTemplate,
   overviewMarkdownTemplate,
   serviceIndexMarkdownTemplate,
   typeMarkdownTemplate,
+  typesIndexMarkdownTemplate,
 } from "./templates.js";
 
 interface RenderedDoc {
@@ -176,6 +178,27 @@ interface VersionedServiceGroup {
   versions: VersionedServiceIndexEntry[];
 }
 
+interface OperationsIndexModel {
+  title: string;
+  operations: Array<{
+    name: string;
+    containerLabel: string;
+    returnType: string;
+    summaryOrFallback: string;
+    path: string;
+  }>;
+}
+
+interface TypesIndexModel {
+  title: string;
+  types: Array<{
+    name: string;
+    kind: string;
+    summaryOrFallback: string;
+    path: string;
+  }>;
+}
+
 interface ServiceIndexModel {
   services: Array<RenderedDoc>;
   versionedServices: VersionedServiceGroup[];
@@ -191,12 +214,15 @@ const markdownOverview = compileTemplate<OverviewPageModel>(overviewMarkdownTemp
 const markdownOperation = compileTemplate<OperationPageModel>(operationMarkdownTemplate);
 const markdownType = compileTemplate<TypePageModel>(typeMarkdownTemplate);
 const markdownIndex = compileTemplate<ServiceIndexModel>(serviceIndexMarkdownTemplate);
+const markdownOperationsIndex = compileTemplate<OperationsIndexModel>(operationsIndexMarkdownTemplate);
+const markdownTypesIndex = compileTemplate<TypesIndexModel>(typesIndexMarkdownTemplate);
 
 Handlebars.registerHelper("join", (values: string[], separator: string) => values.join(separator));
 Handlebars.registerHelper("mdCell", (value: unknown) => escapeMarkdownCell(String(value ?? "")));
 
 export async function $onEmit(context: EmitContext<ApiDocsEmitterOptions>) {
   const program = context.program;
+  const format: OutputFormat = context.options["format"] ?? "azure-devops";
   const serviceEntries = getServiceEntries(program, context.options["page-title-prefix"]);
 
   if (context.options["render-service-index"] === true) {
@@ -206,7 +232,7 @@ export async function $onEmit(context: EmitContext<ApiDocsEmitterOptions>) {
         title: service.overview.title,
         summary: service.overview.summary,
         summaryOrFallback: service.overview.summary ?? FALLBACK_SUMMARY,
-        path: `${service.slug}/index.md`,
+        path: `${service.slug}/${overviewFileName(service.slug, format)}`,
       }));
 
     const versionedServices = [...serviceEntries
@@ -218,7 +244,7 @@ export async function $onEmit(context: EmitContext<ApiDocsEmitterOptions>) {
           title: service.overview.title,
           summary: service.overview.summary,
           summaryOrFallback: service.overview.summary ?? FALLBACK_SUMMARY,
-          path: `${service.slug}/index.md`,
+          path: `${service.slug}/${overviewFileName(service.slug, format)}`,
           version: service.versionValue!,
         });
         groups.set(key, current);
@@ -230,22 +256,59 @@ export async function $onEmit(context: EmitContext<ApiDocsEmitterOptions>) {
       }))
       .sort((left, right) => left.name.localeCompare(right.name));
 
+    const rootIndexFile = rootIndexFileName(format);
     await emitFile(program, {
-      path: resolvePath(context.emitterOutputDir, "index.md"),
+      path: resolvePath(context.emitterOutputDir, rootIndexFile),
       content: renderServiceIndex({
         services: nonVersionedServices,
         versionedServices,
       }),
     });
+
+    if (format === "docfx") {
+      const allServiceLinks = [
+        ...nonVersionedServices,
+        ...versionedServices.flatMap((g) => g.versions),
+      ];
+      await emitFile(program, {
+        path: resolvePath(context.emitterOutputDir, "toc.yml"),
+        content: buildDocFxRootTocContent(allServiceLinks),
+      });
+    }
   }
 
   for (const service of serviceEntries) {
     const baseDir = resolvePath(context.emitterOutputDir, service.slug);
 
     await emitFile(program, {
-      path: resolvePath(baseDir, "index.md"),
+      path: resolvePath(baseDir, overviewFileName(service.slug, format)),
       content: renderOverview(service.overview),
     });
+
+    if (format === "azure-devops" || format === "github") {
+      const folderIndexName = format === "azure-devops" ? "operations.md" : "README.md";
+      if (service.operations.length > 0) {
+        await emitFile(program, {
+          path: resolvePath(baseDir, "operations", folderIndexName),
+          content: renderOperationsIndex(buildOperationsIndexModel(service)),
+        });
+      }
+
+      const typesIndexName = format === "azure-devops" ? "types.md" : "README.md";
+      if (service.types.length > 0) {
+        await emitFile(program, {
+          path: resolvePath(baseDir, "types", typesIndexName),
+          content: renderTypesIndex(buildTypesIndexModel(service)),
+        });
+      }
+    }
+
+    if (format === "docfx") {
+      await emitFile(program, {
+        path: resolvePath(baseDir, "toc.yml"),
+        content: buildDocFxServiceTocContent(service),
+      });
+    }
 
     for (const operationPage of service.operations) {
       await emitFile(program, {
@@ -267,6 +330,75 @@ function compileTemplate<T>(source: string): Handlebars.TemplateDelegate<T> {
   return Handlebars.compile<T>(source, { noEscape: true });
 }
 
+function overviewFileName(slug: string, format: OutputFormat): string {
+  switch (format) {
+    case "github": return "README.md";
+    case "docfx": return "index.md";
+    default: return `${slug}.md`; // azure-devops
+  }
+}
+
+function rootIndexFileName(format: OutputFormat): string {
+  return format === "github" ? "README.md" : "index.md";
+}
+
+function buildOperationsIndexModel(service: ServiceEntry): OperationsIndexModel {
+  return {
+    title: "Operations",
+    operations: service.overview.operations.map((op) => ({
+      name: op.name,
+      containerLabel: op.containerLabel,
+      returnType: op.returnType,
+      summaryOrFallback: op.summaryOrFallback,
+      path: op.path.replace(/^operations\//, ""),
+    })),
+  };
+}
+
+function buildTypesIndexModel(service: ServiceEntry): TypesIndexModel {
+  return {
+    title: "Types",
+    types: service.overview.types.map((t) => ({
+      name: t.name,
+      kind: t.kind,
+      summaryOrFallback: t.summaryOrFallback,
+      path: t.path.replace(/^types\//, ""),
+    })),
+  };
+}
+
+function buildDocFxServiceTocContent(service: ServiceEntry): string {
+  const lines: string[] = [];
+  lines.push(`- name: Overview`);
+  lines.push(`  href: index.md`);
+  if (service.operations.length > 0) {
+    lines.push(`- name: Operations`);
+    lines.push(`  items:`);
+    for (const op of service.operations) {
+      lines.push(`  - name: ${op.page.title}`);
+      lines.push(`    href: operations/${op.slug}.md`);
+    }
+  }
+  if (service.types.length > 0) {
+    lines.push(`- name: Types`);
+    lines.push(`  items:`);
+    for (const type of service.types) {
+      lines.push(`  - name: ${type.page.title}`);
+      lines.push(`    href: types/${type.slug}.md`);
+    }
+  }
+  return lines.join("\n") + "\n";
+}
+
+function buildDocFxRootTocContent(services: Array<{ title: string; path: string }>): string {
+  const lines: string[] = [];
+  for (const service of services) {
+    lines.push(`- name: ${service.title}`);
+    lines.push(`  href: ${service.path}`);
+  }
+  return lines.join("\n") + "\n";
+}
+
 function renderServiceIndex(model: ServiceIndexModel): string {
   return markdownIndex(model);
 }
@@ -281,6 +413,14 @@ function renderOperation(model: OperationPageModel): string {
 
 function renderType(model: TypePageModel): string {
   return markdownType(model);
+}
+
+function renderOperationsIndex(model: OperationsIndexModel): string {
+  return markdownOperationsIndex(model);
+}
+
+function renderTypesIndex(model: TypesIndexModel): string {
+  return markdownTypesIndex(model);
 }
 
 function getServiceEntries(program: Program, pageTitlePrefix?: string): ServiceEntry[] {
@@ -531,8 +671,12 @@ function buildOperationPage(program: Program, operation: Operation, versionLabel
   const summary = getSummary(program, operation) ?? getDoc(program, operation);
   const httpOperation = resolveHttpOperation(program, operation);
 
+  const operationLabel = operation.interface?.name
+    ? `${operation.interface.name} ${operation.name}`
+    : operation.name;
+
   return {
-    title: toTitleCaseLabel(operation.name),
+    title: toTitleCaseLabel(operationLabel),
     summary,
     deprecated: getDeprecated(program, operation),
     versionLabel,
@@ -1222,9 +1366,8 @@ function typeReference(program: Program, type: Type): string {
       }
       return [...type.variants.values()].map((variant) => typeReference(program, variant.type)).join(" | ");
     case "Model":
-      if (type.name) {
-        return type.name;
-      }
+      // Check structural array/record types before the name to correctly handle
+      // anonymous template instantiations (e.g., Array<Widget> from Widget[]).
       if (isArrayModelType(program, type)) {
         const valueType = type.indexer?.value ?? [...type.properties.values()][0]?.type;
         return `${valueType ? typeReference(program, valueType) : "unknown"}[]`;
@@ -1232,6 +1375,9 @@ function typeReference(program: Program, type: Type): string {
       if (isRecordModelType(program, type)) {
         const valueType = type.indexer?.value;
         return `Record<string, ${valueType ? typeReference(program, valueType) : "unknown"}>`;
+      }
+      if (type.name) {
+        return type.name;
       }
       return `{ ${[...type.properties.values()]
         .map((property) => `${property.name}${property.optional ? "?" : ""}: ${typeReference(program, property.type)}`)
