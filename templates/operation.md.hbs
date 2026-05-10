@@ -1,0 +1,139 @@
+# {{title}}
+
+{{#if summary}}
+{{summary}}
+
+{{/if}}
+{{#if deprecated}}
+Deprecated: {{deprecated}}
+
+{{/if}}
+{{#if versionLabel}}
+Version: `{{versionLabel}}`
+
+{{/if}}
+{{#if breadcrumbs.length}}
+Path: {{join breadcrumbs " > "}}
+
+{{/if}}
+{{#if httpRequest}}
+## HTTP request
+
+```http
+{{httpRequest}}
+```
+
+{{/if}}
+## Optional query parameters
+
+{{#if optionalQueryParameters.length}}
+| Name | Type | Required | Summary |
+| --- | --- | --- | --- |
+{{#each optionalQueryParameters}}
+| {{mdCell name}} | {{mdCell type}} | {{mdCell requiredLabel}} | {{mdCell summaryOrFallback}} |
+{{/each}}
+
+{{else}}
+This method does not support query parameters.
+
+{{/if}}
+
+## Request headers
+
+{{#if requestHeaders.length}}
+| Name | Type | Required | Summary |
+| --- | --- | --- | --- |
+{{#each requestHeaders}}
+| {{mdCell name}} | {{mdCell type}} | {{mdCell requiredLabel}} | {{mdCell summaryOrFallback}} |
+{{/each}}
+
+{{else}}
+No custom request headers are required for this method.
+
+{{/if}}
+
+## Request body
+
+{{#if requestBody}}
+{{requestBody.description}}
+
+Supported content types: `{{join requestBody.contentTypes ", "}}`
+
+{{#if requestBody.jsonExample}}
+```json
+{{requestBody.jsonExample}}
+```
+
+{{/if}}
+{{else}}
+Don't supply a request body for this method.
+
+{{/if}}
+
+## Response
+
+`{{returnType}}`
+
+{{#if returnsDoc}}
+{{returnsDoc}}
+
+{{/if}}
+{{#if responses.length}}
+| Status code | Type | Description |
+| --- | --- | --- |
+{{#each responses}}
+| {{mdCell statusCode}} | {{mdCell type}} | {{mdCell description}} |
+{{/each}}
+
+{{/if}}
+
+## Signature
+
+`{{signature}}`
+
+## Parameters
+
+{{#if parameters.length}}
+| Name | Type | Required | Summary |
+| --- | --- | --- | --- |
+{{#each parameters}}
+| {{mdCell name}} | {{mdCell type}} | {{mdCell requiredLabel}} | {{mdCell summaryOrFallback}} |
+{{/each}}
+{{else}}
+This method does not declare request parameters.
+{{/if}}
+{{#if errorsDoc}}
+## Errors
+
+{{errorsDoc}}
+
+{{/if}}
+{{#if examples.length}}
+## Examples
+
+{{#each examples}}
+### {{title}}
+
+{{#if description}}
+{{description}}
+
+{{/if}}
+#### Request
+
+```http
+{{request}}
+```
+
+{{#if response}}
+#### Response
+
+```http
+{{response}}
+```
+
+{{/if}}
+{{/each}}
+{{else}}
+No examples provided.
+
+{{/if}}

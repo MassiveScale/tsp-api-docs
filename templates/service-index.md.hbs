@@ -1,0 +1,31 @@
+# API Reference
+
+{{#if versionedServices.length}}
+## Versioned Services
+
+{{#each versionedServices}}
+### {{name}}
+
+| Version | Docs | Summary |
+| --- | --- | --- |
+{{#each versions}}
+| {{version}} | [{{title}}]({{path}}) | {{summaryOrFallback}} |
+{{/each}}
+
+{{/each}}
+{{/if}}
+
+{{#if services.length}}
+{{#if versionedServices.length}}
+## Services
+
+{{/if}}
+| Service | Summary |
+| --- | --- |
+{{#each services}}
+| [{{title}}]({{path}}) | {{summaryOrFallback}} |
+{{/each}}
+{{else if versionedServices.length}}
+{{else}}
+No services were found in this TypeSpec program.
+{{/if}}

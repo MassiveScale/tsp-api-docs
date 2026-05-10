@@ -1,0 +1,7 @@
+emit:
+  - "@massivescale/tsp-api-docs"
+
+options:
+  "@massivescale/tsp-api-docs":
+    emitter-output-dir: "{output-dir}"
+    render-service-index: true

@@ -1,0 +1,83 @@
+# {{title}}
+
+{{#if summary}}
+{{summary}}
+
+{{/if}}
+{{#if deprecated}}
+Deprecated: {{deprecated}}
+
+{{/if}}
+{{#if versionLabel}}
+Version: `{{versionLabel}}`
+
+{{/if}}
+Kind: {{kind}}
+
+{{#if breadcrumbs.length}}
+Path: {{join breadcrumbs " > "}}
+
+{{/if}}
+{{#if baseType}}
+Base type: `{{baseType}}`
+
+{{/if}}
+{{#if methods.length}}
+## Methods
+
+| Method | Container | Returns | Summary |
+| --- | --- | --- | --- |
+{{#each methods}}
+| [{{mdCell name}}]({{path}}) | {{mdCell containerLabel}} | {{mdCell returnType}} | {{mdCell summaryOrFallback}} |
+{{/each}}
+
+{{/if}}
+{{#if properties.length}}
+## Properties
+
+| Name | Type | Required | Summary |
+| --- | --- | --- | --- |
+{{#each properties}}
+| {{mdCell name}} | {{mdCell type}} | {{mdCell requiredLabel}} | {{mdCell summaryOrFallback}} |
+{{/each}}
+{{/if}}
+{{#if variants.length}}
+## Variants
+
+| Name | Type | Summary |
+| --- | --- | --- |
+{{#each variants}}
+| {{mdCell name}} | {{mdCell type}} | {{mdCell summaryOrFallback}} |
+{{/each}}
+{{/if}}
+{{#if members.length}}
+## Members
+
+| Name | Value | Summary |
+| --- | --- | --- |
+{{#each members}}
+| {{mdCell name}} | {{mdCell value}} | {{mdCell summaryOrFallback}} |
+{{/each}}
+{{/if}}
+## JSON representation
+
+```json
+{{jsonRepresentation}}
+```
+
+{{#if examples.length}}
+## Examples
+
+{{#each examples}}
+### {{title}}
+
+{{#if description}}
+{{description}}
+
+{{/if}}
+```json
+{{json}}
+```
+
+{{/each}}
+{{/if}}

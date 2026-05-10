@@ -1,0 +1,49 @@
+# {{title}}
+
+{{#if summary}}
+{{summary}}
+
+{{/if}}
+{{#if versionLabel}}
+Version: `{{versionLabel}}`
+
+{{/if}}
+{{#if serviceName}}
+Service namespace: {{serviceName}}
+
+{{/if}}
+## Namespaces
+
+{{#if namespaces.length}}
+| Namespace | Summary |
+| --- | --- |
+{{#each namespaces}}
+| {{mdCell name}} | {{mdCell summaryOrFallback}} |
+{{/each}}
+{{else}}
+No additional namespaces were documented.
+{{/if}}
+
+## Resources
+
+{{#if types.length}}
+| Type | Kind | Summary |
+| --- | --- | --- |
+{{#each types}}
+| [{{mdCell name}}]({{path}}) | {{mdCell kind}} | {{mdCell summaryOrFallback}} |
+{{/each}}
+{{else}}
+No resource types were found.
+{{/if}}
+
+## Methods
+
+{{#if operations.length}}
+| Method | Container | Returns | Summary |
+| --- | --- | --- | --- |
+{{#each operations}}
+| [{{mdCell name}}]({{path}}) | {{mdCell containerLabel}} | {{mdCell returnType}} | {{mdCell summaryOrFallback}} |
+{{/each}}
+{{else}}
+No operations were found.
+{{/if}}
