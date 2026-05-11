@@ -233,7 +233,10 @@ export async function $onEmit(context: EmitContext<ApiDocsEmitterOptions>) {
         title: service.overview.title,
         summary: service.overview.summary,
         summaryOrFallback: service.overview.summary ?? FALLBACK_SUMMARY,
-        path: `${service.slug}/${overviewFileName(service.slug, format)}`,
+        // For azure-devops, the overview is at emitterOutputDir/slug.md (next to the slug/ folder).
+        path: format === "azure-devops"
+          ? overviewFileName(service.slug, format)
+          : `${service.slug}/${overviewFileName(service.slug, format)}`,
       }));
 
     const versionedServices = [...serviceEntries
@@ -245,7 +248,9 @@ export async function $onEmit(context: EmitContext<ApiDocsEmitterOptions>) {
           title: service.overview.title,
           summary: service.overview.summary,
           summaryOrFallback: service.overview.summary ?? FALLBACK_SUMMARY,
-          path: `${service.slug}/${overviewFileName(service.slug, format)}`,
+          path: format === "azure-devops"
+            ? overviewFileName(service.slug, format)
+            : `${service.slug}/${overviewFileName(service.slug, format)}`,
           version: service.versionValue!,
         });
         groups.set(key, current);
@@ -281,25 +286,40 @@ export async function $onEmit(context: EmitContext<ApiDocsEmitterOptions>) {
   for (const service of serviceEntries) {
     const baseDir = resolvePath(context.emitterOutputDir, service.slug);
 
+    // For azure-devops, the overview page is placed next to the slug/ folder so that
+    // it acts as the parent page for the folder in the Azure DevOps Wiki sidebar.
+    const overviewPath = format === "azure-devops"
+      ? resolvePath(context.emitterOutputDir, overviewFileName(service.slug, format))
+      : resolvePath(baseDir, overviewFileName(service.slug, format));
+    // Adjust intra-overview links to account for the moved file location.
+    const overviewModel = format === "azure-devops"
+      ? adjustOverviewPathsForAzureDevOps(service.overview, service.slug)
+      : service.overview;
     await emitFile(program, {
-      path: resolvePath(baseDir, overviewFileName(service.slug, format)),
-      content: renderOverview(service.overview),
+      path: overviewPath,
+      content: renderOverview(overviewModel),
     });
 
     if (format === "azure-devops" || format === "github") {
-      const folderIndexName = format === "azure-devops" ? "api.md" : "README.md";
       if (service.operations.length > 0) {
+        // For azure-devops, the operations index is placed next to api/ (not inside it).
+        const opsIndexPath = format === "azure-devops"
+          ? resolvePath(baseDir, "api.md")
+          : resolvePath(baseDir, "api", "README.md");
         await emitFile(program, {
-          path: resolvePath(baseDir, "api", folderIndexName),
-          content: renderOperationsIndex(buildOperationsIndexModel(service)),
+          path: opsIndexPath,
+          content: renderOperationsIndex(buildOperationsIndexModel(service, format)),
         });
       }
 
-      const typesIndexName = format === "azure-devops" ? "resources.md" : "README.md";
       if (service.types.length > 0) {
+        // For azure-devops, the types index is placed next to resources/ (not inside it).
+        const typesIndexPath = format === "azure-devops"
+          ? resolvePath(baseDir, "resources.md")
+          : resolvePath(baseDir, "resources", "README.md");
         await emitFile(program, {
-          path: resolvePath(baseDir, "resources", typesIndexName),
-          content: renderTypesIndex(buildTypesIndexModel(service)),
+          path: typesIndexPath,
+          content: renderTypesIndex(buildTypesIndexModel(service, format)),
         });
       }
     }
@@ -346,7 +366,7 @@ function rootIndexFileName(format: OutputFormat): string {
   }
 }
 
-function buildOperationsIndexModel(service: ServiceEntry): OperationsIndexModel {
+function buildOperationsIndexModel(service: ServiceEntry, format: OutputFormat): OperationsIndexModel {
   return {
     title: "Operations",
     operations: service.overview.operations.map((op) => ({
@@ -354,21 +374,58 @@ function buildOperationsIndexModel(service: ServiceEntry): OperationsIndexModel 
       containerLabel: op.containerLabel,
       returnType: op.returnType,
       summaryOrFallback: op.summaryOrFallback,
-      path: op.path.replace(/^api\//, ""),
+      // azure-devops: index is next to api/ so the full path (api/Slug.md) is correct.
+      // github: index is inside api/ so the api/ prefix must be stripped.
+      path: format === "azure-devops" ? op.path : op.path.replace(/^api\//, ""),
     })),
   };
 }
 
-function buildTypesIndexModel(service: ServiceEntry): TypesIndexModel {
+function buildTypesIndexModel(service: ServiceEntry, format: OutputFormat): TypesIndexModel {
   return {
     title: "Types",
     types: service.overview.types.map((t) => ({
       name: t.name,
       kind: t.kind,
       summaryOrFallback: t.summaryOrFallback,
-      path: t.path.replace(/^resources\//, ""),
+      // azure-devops: index is next to resources/ so the full path (resources/Name.md) is correct.
+      // github: index is inside resources/ so the resources/ prefix must be stripped.
+      path: format === "azure-devops" ? t.path : t.path.replace(/^resources\//, ""),
     })),
   };
+}
+
+/**
+ * Adjusts overview model paths for azure-devops format, where the overview page is
+ * emitted one level above the service folder (next to it, not inside it). All relative
+ * links must be prefixed with the service slug to remain correct.
+ */
+function adjustOverviewPathsForAzureDevOps(overview: OverviewPageModel, slug: string): OverviewPageModel {
+  return {
+    ...overview,
+    operations: overview.operations.map((op) => ({
+      ...op,
+      path: `${slug}/${op.path}`,
+      returnType: prefixRelativeMarkdownLinks(op.returnType, slug),
+    })),
+    types: overview.types.map((t) => ({
+      ...t,
+      path: `${slug}/${t.path}`,
+    })),
+  };
+}
+
+/**
+ * Prefixes all relative Markdown link hrefs in a string with the given prefix.
+ * Absolute URLs, absolute paths, and anchors are left unchanged.
+ */
+function prefixRelativeMarkdownLinks(text: string, prefix: string): string {
+  return text.replace(/\]\(([^)]+)\)/g, (_, href) => {
+    if (/^[a-z]+:\/\/|^\/|^#/.test(href)) {
+      return `](${href})`;
+    }
+    return `](${prefix}/${href})`;
+  });
 }
 
 function buildDocFxServiceTocContent(service: ServiceEntry): string {

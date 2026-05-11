@@ -22,6 +22,7 @@ This project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Fixed
 
 - The root service index was incorrectly emitted as `index.md` instead of `README.md` in `azure-devops` format when `render-service-index` is enabled.
+- **Azure DevOps Wiki index page placement** — overview pages, operations index pages (`api.md`), and types index pages (`resources.md`) are now emitted at the same level as the folder they represent rather than inside it. Azure DevOps Wiki requires a page to sit beside its child folder (not within it) for the sidebar to associate the page with the folder node.
 
 ---
 

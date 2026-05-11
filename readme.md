@@ -63,18 +63,18 @@ options:
 
 ### `azure-devops` (default)
 
-Generates structure compatible with **Azure DevOps Wiki**. Each folder's default landing page has the same name as the folder, which Azure DevOps Wiki renders when a folder node is selected.
+Generates structure compatible with **Azure DevOps Wiki**. Index pages sit beside the folder they describe — Azure DevOps Wiki associates a page with a folder when the page is at the same level as (not inside) the folder.
 
 ```text
 tsp-output/
   README.md                         # root index (render-service-index: true)
+  <service-slug>.md                 # overview — beside the service folder
   <service-slug>/
-    <service-slug>.md               # overview — same name as folder
+    api.md                          # operations index — beside api/
     api/
-      api.md                        # sub-folder index
       <Operation>.md
+    resources.md                    # types index — beside resources/
     resources/
-      resources.md                  # sub-folder index
       <Type>.md
 ```
 

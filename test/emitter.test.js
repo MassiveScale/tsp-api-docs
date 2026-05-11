@@ -41,8 +41,9 @@ describe("tsp-api-docs emitter", () => {
       const result = await tester.emit("@massivescale/tsp-api-docs").compile(widgetSource);
 
       assert.equal(result.outputs["index.md"], undefined);
-      assert.ok(result.outputs["widget-api/widget-api.md"].includes("## Resources"));
-      assert.ok(result.outputs["widget-api/widget-api.md"].includes("getWidget"));
+      // Overview is at the same level as the widget-api/ folder (not inside it).
+      assert.ok(result.outputs["widget-api.md"].includes("## Resources"));
+      assert.ok(result.outputs["widget-api.md"].includes("getWidget"));
       assert.ok(result.outputs["widget-api/api/Get-Widget.md"].includes("# Get Widget"));
       assert.ok(result.outputs["widget-api/api/Get-Widget.md"].includes("Return a widget by id."));
       assert.ok(result.outputs["widget-api/resources/Widget.md"].includes("Stable identifier"));
@@ -53,10 +54,11 @@ describe("tsp-api-docs emitter", () => {
     it("generates sub-folder index files named after the folder", async () => {
       const result = await tester.emit("@massivescale/tsp-api-docs").compile(widgetSource);
 
-      assert.ok(result.outputs["widget-api/api/api.md"].includes("# Operations"));
-      assert.ok(result.outputs["widget-api/api/api.md"].includes("getWidget"));
-      assert.ok(result.outputs["widget-api/resources/resources.md"].includes("# Types"));
-      assert.ok(result.outputs["widget-api/resources/resources.md"].includes("Widget"));
+      // Index files are at the same level as the folder they represent.
+      assert.ok(result.outputs["widget-api/api.md"].includes("# Operations"));
+      assert.ok(result.outputs["widget-api/api.md"].includes("getWidget"));
+      assert.ok(result.outputs["widget-api/resources.md"].includes("# Types"));
+      assert.ok(result.outputs["widget-api/resources.md"].includes("Widget"));
     });
 
     it("emits separate docs for multiple services", async () => {
@@ -79,8 +81,8 @@ describe("tsp-api-docs emitter", () => {
       `);
 
       assert.equal(result.outputs["index.md"], undefined);
-      assert.ok(result.outputs["accounts-api/accounts-api.md"].includes("getUser"));
-      assert.ok(result.outputs["orders-api/orders-api.md"].includes("getOrder"));
+      assert.ok(result.outputs["accounts-api.md"].includes("getUser"));
+      assert.ok(result.outputs["orders-api.md"].includes("getOrder"));
       assert.ok(result.outputs["accounts-api/api/Get-User.md"] !== undefined);
       assert.ok(result.outputs["orders-api/api/Get-Order.md"] !== undefined);
     });
@@ -97,7 +99,8 @@ describe("tsp-api-docs emitter", () => {
         op getWidget(id: string): Widget;
       `);
 
-      assert.ok(result.outputs["README.md"].includes("[Widget API](widget-api/widget-api.md)"));
+      // Service index links to the overview page, which is next to the widget-api/ folder.
+      assert.ok(result.outputs["README.md"].includes("[Widget API](widget-api.md)"));
     });
 
     it("renders documentation sets for each service version", async () => {
@@ -140,17 +143,18 @@ describe("tsp-api-docs emitter", () => {
         }
       `);
 
-      assert.ok(result.outputs["1-0/1-0.md"] !== undefined);
-      assert.ok(result.outputs["1-1/1-1.md"] !== undefined);
-      assert.ok(result.outputs["2-0/2-0.md"] !== undefined);
-      assert.ok(result.outputs["1-0/1-0.md"].includes("list"));
-      assert.ok(!result.outputs["1-0/1-0.md"].includes("create"));
-      assert.ok(result.outputs["1-1/1-1.md"].includes("create"));
-      assert.ok(!result.outputs["1-1/1-1.md"].includes("analyze"));
-      assert.ok(result.outputs["2-0/2-0.md"].includes("analyze"));
+      // Overview pages are at the same level as their version folder.
+      assert.ok(result.outputs["1-0.md"] !== undefined);
+      assert.ok(result.outputs["1-1.md"] !== undefined);
+      assert.ok(result.outputs["2-0.md"] !== undefined);
+      assert.ok(result.outputs["1-0.md"].includes("list"));
+      assert.ok(!result.outputs["1-0.md"].includes("create"));
+      assert.ok(result.outputs["1-1.md"].includes("create"));
+      assert.ok(!result.outputs["1-1.md"].includes("analyze"));
+      assert.ok(result.outputs["2-0.md"].includes("analyze"));
       assert.equal(result.outputs["1-0/resources/Analyze-Result.md"], undefined);
       assert.ok(result.outputs["2-0/resources/Analyze-Result.md"] !== undefined);
-      assert.ok(result.outputs["2-0/2-0.md"].includes("Version: `2.0`"));
+      assert.ok(result.outputs["2-0.md"].includes("Version: `2.0`"));
       assert.ok(result.outputs["2-0/resources/Widget.md"].includes("Version: `2.0`"));
       assert.ok(result.outputs["2-0/api/Widgets-List.md"].includes("Version: `2.0`"));
     });
@@ -184,8 +188,9 @@ describe("tsp-api-docs emitter", () => {
 
       assert.ok(result.outputs["README.md"].includes("## Versioned Services"));
       assert.ok(result.outputs["README.md"].includes("### Widget API"));
-      assert.ok(result.outputs["README.md"].includes("| 1.0     | [Widget API 1.0](1-0/1-0.md) |"));
-      assert.ok(result.outputs["README.md"].includes("| 2.0     | [Widget API 2.0](2-0/2-0.md) |"));
+      // Version index links point to overview pages next to the version folders.
+      assert.ok(result.outputs["README.md"].includes("| 1.0     | [Widget API 1.0](1-0.md) |"));
+      assert.ok(result.outputs["README.md"].includes("| 2.0     | [Widget API 2.0](2-0.md) |"));
     });
   });
 
