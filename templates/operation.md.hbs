@@ -27,8 +27,8 @@ Path: {{join breadcrumbs " > "}}
 ## Optional query parameters
 
 {{#if optionalQueryParameters.length}}
-| Name | Type | Required | Summary |
-| --- | --- | --- | --- |
+| Name             | Type           | Required                 | Summary                      |
+| ---------------- | -------------- | ------------------------ | ---------------------------- |
 {{#each optionalQueryParameters}}
 | {{mdCell name}} | {{mdCell type}} | {{mdCell requiredLabel}} | {{mdCell summaryOrFallback}} |
 {{/each}}
@@ -41,8 +41,8 @@ This method does not support query parameters.
 ## Request headers
 
 {{#if requestHeaders.length}}
-| Name | Type | Required | Summary |
-| --- | --- | --- | --- |
+| Name             | Type           | Required                 | Summary                      |
+| ---------------- | -------------- | ------------------------ | ---------------------------- |
 {{#each requestHeaders}}
 | {{mdCell name}} | {{mdCell type}} | {{mdCell requiredLabel}} | {{mdCell summaryOrFallback}} |
 {{/each}}
@@ -72,15 +72,15 @@ Don't supply a request body for this method.
 
 ## Response
 
-`{{returnType}}`
+{{returnType}}
 
 {{#if returnsDoc}}
 {{returnsDoc}}
 
 {{/if}}
 {{#if responses.length}}
-| Status code | Type | Description |
-| --- | --- | --- |
+| Status code           | Type            | Description            |
+| --------------------- | --------------- | ---------------------- |
 {{#each responses}}
 | {{mdCell statusCode}} | {{mdCell type}} | {{mdCell description}} |
 {{/each}}
@@ -94,8 +94,8 @@ Don't supply a request body for this method.
 ## Parameters
 
 {{#if parameters.length}}
-| Name | Type | Required | Summary |
-| --- | --- | --- | --- |
+| Name            | Type             | Required                | Summary                      |
+| --------------- | ---------------- | ----------------------- | ---------------------------- |
 {{#each parameters}}
 | {{mdCell name}} | {{mdCell type}} | {{mdCell requiredLabel}} | {{mdCell summaryOrFallback}} |
 {{/each}}

@@ -68,15 +68,15 @@ model AnalyzeResult {
 @tag("Widgets")
 interface Widgets {
   /** List widgets */
-  @get list(): WidgetList | Error;
+  @get list(): WidgetList;
 
   /** Read widgets */
-  @get read(@path id: string): Widget | Error;
+  @get read(@path id: string): Widget;
 
   /** Create a widget */
   @added(Versions.v1_1)
   @post
-  create(@body body: Widget): Widget | Error;
+  create(@body body: Widget): Widget;
 
   /** Update a widget */
   @added(Versions.v1_1)
@@ -84,16 +84,16 @@ interface Widgets {
   update(
     @path id: string,
     @body body: MergePatchUpdate<Widget>,
-  ): Widget | Error;
+  ): NoContentResponse;
 
   /** Delete a widget */
   @added(Versions.v2_0)
   @delete
-  delete(@path id: string): void | Error;
+  delete(@path id: string): NoContentResponse;
 
   /** Analyze a widget */
   @added(Versions.v2_0)
   @route("{id}/analyze")
   @post
-  analyze(@path id: string): AnalyzeResult | Error;
+  analyze(@path id: string): AnalyzeResult;
 }

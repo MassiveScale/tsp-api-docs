@@ -356,7 +356,7 @@ describe("tsp-api-docs emitter", () => {
     assert.ok(widgetListPage.includes("## Methods"));
     assert.ok(widgetListPage.includes("| [list](../api/Widgets-List.md) |"));
     assert.ok(widgetListPage.includes("## Properties"));
-    assert.ok(widgetListPage.includes("| items | Widget[] | Yes      | No summary provided. |"));
+    assert.ok(widgetListPage.includes("| items | [Widget](Widget.md)[] | Yes      | No summary provided. |"));
     assert.ok(!widgetListPage.includes("## Relationships"));
     assert.ok(!widgetListPage.includes("### items"));
     assert.ok(!widgetListPage.includes("| [read](api/Widgets-Read.md) |"));

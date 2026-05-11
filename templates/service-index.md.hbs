@@ -6,8 +6,8 @@
 {{#each versionedServices}}
 ### {{name}}
 
-| Version | Link |
-| --- | --- |
+| Version     | Link                  |
+| ----------- | --------------------- |
 {{#each versions}}
 | {{version}} | [{{title}}]({{path}}) |
 {{/each}}
@@ -20,8 +20,8 @@
 ## Services
 
 {{/if}}
-| Service | Summary |
-| --- | --- |
+| Service               | Summary               |
+| --------------------- | --------------------- |
 {{#each services}}
 | [{{title}}]({{path}}) | {{summaryOrFallback}} |
 {{/each}}

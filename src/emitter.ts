@@ -490,30 +490,30 @@ function collectServiceEntry(
   const serviceLabel = version ? `${baseServiceLabel} ${version.value}` : baseServiceLabel;
   const serviceSlug = version ? slugify(version.value) : slugify(serviceLabel);
 
-  const operationPages = operations
-    .sort((left, right) => left.name.localeCompare(right.name))
-    .map((operation) => {
-      const slug = operationFileName(operation.operation);
-      return {
-        slug,
-        page: buildOperationPage(program, operation.operation, version?.value),
-      };
-    });
+  // Pre-compute slugs and path maps so type references can be linked across all pages.
+  const sortedOperations = operations.slice().sort((a, b) => a.name.localeCompare(b.name));
+  const sortedTypes = types.slice().sort((a, b) => a.name.localeCompare(b.name));
+  const operationPathById = new Map(
+    sortedOperations.map((op) => [op.id, `api/${operationFileName(op.operation)}.md`]),
+  );
+  const typePathById = new Map(
+    sortedTypes.map((t) => [t.id, `resources/${toTitleCaseFileName(t.name)}.md`]),
+  );
 
-  const operationPathById = new Map(operationPages.map((item, index) => [operations[index].id, `api/${item.slug}.md`]));
+  const relatedMethodsByTypeId = buildRelatedMethodsByType(program, sortedTypes, sortedOperations, operationPathById, typePathById);
 
-  const relatedMethodsByTypeId = buildRelatedMethodsByType(program, types, operations, operationPathById);
+  const operationPages = sortedOperations.map((operation) => ({
+    slug: operationFileName(operation.operation),
+    page: buildOperationPage(program, operation.operation, typePathById, version?.value),
+  }));
 
-  const typePages = types
-    .sort((left, right) => left.name.localeCompare(right.name))
-    .map((typeEntry) => {
-      const slug = toTitleCaseFileName(typeEntry.name);
-      return {
-        slug,
-        page: buildTypePage(program, typeEntry.type, relatedMethodsByTypeId.get(typeEntry.id) ?? [], version?.value),
-      };
-    });
-  const typePathById = new Map(typePages.map((item, index) => [types[index].id, `resources/${item.slug}.md`]));
+  const typePages = sortedTypes.map((typeEntry) => ({
+    slug: toTitleCaseFileName(typeEntry.name),
+    page: buildTypePage(program, typeEntry.type, relatedMethodsByTypeId.get(typeEntry.id) ?? [], typePathById, version?.value),
+  }));
+
+  // For the overview page (at the service root), stored paths like `resources/Widget.md` are correct as-is.
+  const overviewTypeRef = makeLinkedTypeRef(program, typePathById, (p) => p);
 
   const overview: OverviewPageModel = {
     title: serviceLabel,
@@ -527,16 +527,16 @@ function collectServiceEntry(
       summaryOrFallback: describeSummary(program, ns),
       path: "#",
     })),
-    operations: operations.map((entry) => ({
+    operations: sortedOperations.map((entry) => ({
       name: entry.name,
       title: entry.name,
       containerLabel: entry.containerLabel,
-      returnType: typeReference(program, entry.operation.returnType),
+      returnType: overviewTypeRef(entry.operation.returnType),
       summary: getSummary(program, entry.operation) ?? getDoc(program, entry.operation),
       summaryOrFallback: describeSummary(program, entry.operation),
       path: operationPathById.get(entry.id) ?? "#",
     })),
-    types: types.map((entry) => ({
+    types: sortedTypes.map((entry) => ({
       name: entry.name,
       title: entry.name,
       kind: entry.type.kind,
@@ -675,13 +675,21 @@ function dedupeById<T extends { id: string }>(entries: T[]): T[] {
   return deduped;
 }
 
-function buildOperationPage(program: Program, operation: Operation, versionLabel?: string): OperationPageModel {
+function buildOperationPage(
+  program: Program,
+  operation: Operation,
+  typePathById: Map<string, string>,
+  versionLabel?: string,
+): OperationPageModel {
   const summary = getSummary(program, operation) ?? getDoc(program, operation);
   const httpOperation = resolveHttpOperation(program, operation);
 
   const operationLabel = operation.interface?.name
     ? `${operation.interface.name} ${operation.name}`
     : operation.name;
+
+  // Operation pages live at api/<slug>.md; type pages live at resources/<name>.md.
+  const makeRef = makeLinkedTypeRef(program, typePathById, (p) => `../${p}`);
 
   return {
     title: toTitleCaseLabel(operationLabel),
@@ -690,13 +698,13 @@ function buildOperationPage(program: Program, operation: Operation, versionLabel
     versionLabel,
     breadcrumbs: breadcrumbsForOperation(program, operation),
     httpRequest: httpOperation ? formatHttpRequest(httpOperation) : undefined,
-    optionalQueryParameters: buildQueryParameterDocs(program, httpOperation),
-    requestHeaders: buildHeaderDocs(program, httpOperation),
+    optionalQueryParameters: buildQueryParameterDocs(program, httpOperation, makeRef),
+    requestHeaders: buildHeaderDocs(program, httpOperation, makeRef),
     signature: `${operation.name}(${formatParametersSignature(program, operation.parameters)}) => ${typeReference(program, operation.returnType)}`,
-    parameters: modelProperties(program, operation.parameters),
-    requestBody: buildRequestBodyDoc(program, httpOperation),
-    returnType: typeReference(program, operation.returnType),
-    responses: buildResponseDocs(program, operation, httpOperation),
+    parameters: modelProperties(program, operation.parameters, makeRef),
+    requestBody: buildRequestBodyDoc(program, httpOperation, makeRef),
+    returnType: makeRef(operation.returnType),
+    responses: buildResponseDocs(program, operation, httpOperation, makeRef),
     returnsDoc: getReturnsDoc(program, operation),
     errorsDoc: undefined,
     examples: operationExamples(program, operation, httpOperation),
@@ -716,21 +724,30 @@ function formatHttpRequest(httpOperation: HttpOperation): string {
   return `${httpOperation.verb.toUpperCase()} ${httpOperation.uriTemplate}`;
 }
 
-function buildRequestBodyDoc(program: Program, httpOperation: HttpOperation | undefined): RequestBodyDoc | undefined {
+function buildRequestBodyDoc(
+  program: Program,
+  httpOperation: HttpOperation | undefined,
+  makeRef: (type: Type) => string,
+): RequestBodyDoc | undefined {
   const body = httpOperation?.parameters.body;
   if (!body) {
     return undefined;
   }
 
+  const typeName = makeRef(body.type);
   return {
-    type: typeReference(program, body.type),
+    type: typeName,
     contentTypes: body.contentTypes.length > 0 ? [...body.contentTypes] : ["application/json"],
-    description: `Supply a request body of type \`${typeReference(program, body.type)}\`.`,
+    description: `Supply a request body of type ${typeName}.`,
     jsonExample: body.bodyKind === "single" ? JSON.stringify(jsonValueForType(program, body.type, new Set<Type>()), null, 2) : undefined,
   };
 }
 
-function buildQueryParameterDocs(program: Program, httpOperation: HttpOperation | undefined): HttpParameterDoc[] {
+function buildQueryParameterDocs(
+  program: Program,
+  httpOperation: HttpOperation | undefined,
+  makeRef: (type: Type) => string,
+): HttpParameterDoc[] {
   if (!httpOperation) {
     return [];
   }
@@ -739,14 +756,18 @@ function buildQueryParameterDocs(program: Program, httpOperation: HttpOperation 
     .filter((parameter) => parameter.type === "query")
     .map((parameter) => ({
       name: parameter.param.name,
-      type: typeReference(program, parameter.param.type),
+      type: makeRef(parameter.param.type),
       requiredLabel: parameter.param.optional ? "No" : "Yes",
       summary: getSummary(program, parameter.param) ?? getDoc(program, parameter.param),
       summaryOrFallback: describeSummary(program, parameter.param),
     }));
 }
 
-function buildHeaderDocs(program: Program, httpOperation: HttpOperation | undefined): HttpParameterDoc[] {
+function buildHeaderDocs(
+  program: Program,
+  httpOperation: HttpOperation | undefined,
+  makeRef: (type: Type) => string,
+): HttpParameterDoc[] {
   if (!httpOperation) {
     return [];
   }
@@ -755,27 +776,32 @@ function buildHeaderDocs(program: Program, httpOperation: HttpOperation | undefi
     .filter((parameter) => parameter.type === "header")
     .map((parameter) => ({
       name: parameter.name,
-      type: typeReference(program, parameter.param.type),
+      type: makeRef(parameter.param.type),
       requiredLabel: parameter.param.optional ? "No" : "Yes",
       summary: getSummary(program, parameter.param) ?? getDoc(program, parameter.param),
       summaryOrFallback: describeSummary(program, parameter.param),
     }));
 }
 
-function buildResponseDocs(program: Program, operation: Operation, httpOperation: HttpOperation | undefined): ResponseDoc[] {
+function buildResponseDocs(
+  program: Program,
+  operation: Operation,
+  httpOperation: HttpOperation | undefined,
+  makeRef: (type: Type) => string,
+): ResponseDoc[] {
   if (!httpOperation) {
     return [
       {
         statusCode: "default",
-        type: typeReference(program, operation.returnType),
-        description: getReturnsDoc(program, operation) ?? `Returns \`${typeReference(program, operation.returnType)}\`.`,
+        type: makeRef(operation.returnType),
+        description: getReturnsDoc(program, operation) ?? `Returns ${makeRef(operation.returnType)}.`,
       },
     ];
   }
 
   return httpOperation.responses.map((response) => ({
     statusCode: formatStatusCode(response.statusCodes),
-    type: typeReference(program, response.type),
+    type: makeRef(response.type),
     description: response.description ?? getSummary(program, response.type) ?? getDoc(program, response.type) ?? FALLBACK_SUMMARY,
   }));
 }
@@ -784,9 +810,13 @@ function buildTypePage(
   program: Program,
   type: Model | Enum | Union | Scalar,
   methods: OperationSummary[],
+  typePathById: Map<string, string>,
   versionLabel?: string,
 ): TypePageModel {
   const summary = getSummary(program, type) ?? getDoc(program, type);
+
+  // Type pages live at resources/<slug>.md; links to other types are in the same folder.
+  const makeRef = makeLinkedTypeRef(program, typePathById, (p) => p.replace(/^resources\//, ""));
 
   if (type.kind === "Model") {
     return {
@@ -796,8 +826,8 @@ function buildTypePage(
       versionLabel,
       kind: type.kind,
       breadcrumbs: breadcrumbsForType(program, type),
-      baseType: type.baseModel ? typeReference(program, type.baseModel) : modelBaseType(program, type),
-      properties: modelProperties(program, type),
+      baseType: type.baseModel ? makeRef(type.baseModel) : modelBaseType(program, type),
+      properties: modelProperties(program, type, makeRef),
       methods,
       variants: [],
       members: [],
@@ -817,7 +847,7 @@ function buildTypePage(
       baseType: undefined,
       properties: [],
       methods,
-      variants: [...type.variants.values()].map((variant) => unionVariant(program, variant)),
+      variants: [...type.variants.values()].map((variant) => unionVariant(program, variant, makeRef)),
       members: [],
       examples: typedExamples(program, type, getExamples(program, type)),
       jsonRepresentation: JSON.stringify(jsonRepresentationForType(program, type), null, 2),
@@ -838,7 +868,7 @@ function buildTypePage(
       variants: [],
       members: [...type.members.values()].map((member) => enumMember(program, member)),
       examples: typedExamples(program, type, getExamples(program, type)),
-      jsonRepresentation: JSON.stringify(jsonRepresentationForType(program, type), null, 2),
+      jsonRepresentation: "",
     };
   }
 
@@ -849,7 +879,7 @@ function buildTypePage(
     versionLabel,
     kind: type.kind,
     breadcrumbs: breadcrumbsForType(program, type),
-    baseType: type.baseScalar ? typeReference(program, type.baseScalar) : undefined,
+    baseType: type.baseScalar ? makeRef(type.baseScalar) : undefined,
     properties: [],
     methods,
     variants: [],
@@ -859,10 +889,14 @@ function buildTypePage(
   };
 }
 
-function modelProperties(program: Program, model: Model): ParameterDoc[] {
+function modelProperties(
+  program: Program,
+  model: Model,
+  makeRef: (type: Type) => string,
+): ParameterDoc[] {
   return [...walkPropertiesInherited(model)].map((property) => ({
     name: property.name,
-    type: typeReference(program, property.type),
+    type: makeRef(property.type),
     requiredLabel: property.optional ? "No" : "Yes",
     summary: getSummary(program, property) ?? getDoc(program, property),
     summaryOrFallback: describeSummary(program, property),
@@ -874,8 +908,12 @@ function buildRelatedMethodsByType(
   types: Array<{ id: string; name: string; type: Model | Enum | Union | Scalar }>,
   operations: Array<{ id: string; name: string; containerLabel: string; operation: Operation }>,
   operationPathById: Map<string, string>,
+  typePathById: Map<string, string>,
 ): Map<string, OperationSummary[]> {
   const relatedMethods = new Map<string, OperationSummary[]>();
+
+  // Type pages live at resources/<slug>.md; links to other types are in the same folder.
+  const makeRef = makeLinkedTypeRef(program, typePathById, (p) => p.replace(/^resources\//, ""));
 
   for (const typeEntry of types) {
     const methods = operations
@@ -884,7 +922,7 @@ function buildRelatedMethodsByType(
         name: operationEntry.name,
         title: operationEntry.name,
         containerLabel: operationEntry.containerLabel,
-        returnType: typeReference(program, operationEntry.operation.returnType),
+        returnType: makeRef(operationEntry.operation.returnType),
         summary: getSummary(program, operationEntry.operation) ?? getDoc(program, operationEntry.operation),
         summaryOrFallback: describeSummary(program, operationEntry.operation),
         path: operationPathById.has(operationEntry.id)
@@ -1005,10 +1043,14 @@ function scalarPlaceholder(type: Scalar): unknown {
   return type.name;
 }
 
-function unionVariant(program: Program, variant: UnionVariant): VariantDoc {
+function unionVariant(
+  program: Program,
+  variant: UnionVariant,
+  makeRef: (type: Type) => string,
+): VariantDoc {
   return {
     name: typeof variant.name === "symbol" ? variant.name.description ?? "variant" : variant.name,
-    type: typeReference(program, variant.type),
+    type: makeRef(variant.type),
     summary: getSummary(program, variant) ?? getDoc(program, variant),
     summaryOrFallback: describeSummary(program, variant),
   };
@@ -1292,7 +1334,7 @@ function serializeSafely(program: Program, value: Example["value"] | OpExample["
 }
 
 function formatParametersSignature(program: Program, model: Model): string {
-  return modelProperties(program, model)
+  return modelProperties(program, model, (type) => typeReference(program, type))
     .map((property) => `${property.name}${property.requiredLabel === "No" ? "?" : ""}: ${property.type}`)
     .join(", ");
 }
@@ -1356,6 +1398,70 @@ function entityId(program: Program, entity: Type): string {
   }
 
   return getTypeName(entity);
+}
+
+/**
+ * Creates a type reference function that produces Markdown links for named types
+ * that have associated documentation pages.
+ *
+ * @param program The TypeSpec program.
+ * @param typePathById A map from entity ID to documentation file path (e.g., `resources/Widget.md`).
+ * @param pathAdjuster Transforms a stored path to one relative to the current page's location.
+ */
+function makeLinkedTypeRef(
+  program: Program,
+  typePathById: Map<string, string>,
+  pathAdjuster: (path: string) => string,
+): (type: Type) => string {
+  function linkedRef(type: Type): string {
+    switch (type.kind) {
+      case "String":
+        return JSON.stringify(type.value);
+      case "Number":
+        return type.valueAsString;
+      case "Boolean":
+        return String(type.value);
+      case "Tuple":
+        return `[${type.values.map(linkedRef).join(", ")}]`;
+      case "Union":
+        if (type.name) {
+          const path = typePathById.get(entityId(program, type));
+          if (path) return `[${type.name}](${pathAdjuster(path)})`;
+          return type.name;
+        }
+        return [...type.variants.values()].map((variant) => linkedRef(variant.type)).join(" | ");
+      case "Model":
+        if (isArrayModelType(program, type)) {
+          const valueType = type.indexer?.value ?? [...type.properties.values()][0]?.type;
+          return `${valueType ? linkedRef(valueType) : "unknown"}[]`;
+        }
+        if (isRecordModelType(program, type)) {
+          const valueType = type.indexer?.value;
+          return `Record<string, ${valueType ? linkedRef(valueType) : "unknown"}>`;
+        }
+        if (type.name) {
+          const path = typePathById.get(entityId(program, type));
+          if (path) return `[${type.name}](${pathAdjuster(path)})`;
+          return type.name;
+        }
+        return `{ ${[...type.properties.values()]
+          .map((property) => `${property.name}${property.optional ? "?" : ""}: ${linkedRef(property.type)}`)
+          .join("; ")} }`;
+      case "Enum": {
+        const path = typePathById.get(entityId(program, type));
+        if (path) return `[${type.name}](${pathAdjuster(path)})`;
+        return type.name;
+      }
+      case "Scalar": {
+        const path = typePathById.get(entityId(program, type));
+        if (path) return `[${type.name}](${pathAdjuster(path)})`;
+        return type.name;
+      }
+      default:
+        return getTypeName(type);
+    }
+  }
+  return linkedRef;
 }
 
 function typeReference(program: Program, type: Type): string {

@@ -12,10 +12,12 @@ This project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Added
 
 - **Automatic table formatting** — all generated Markdown tables are now column-aligned using `markdown-table-prettify` for improved readability.
+- **Type linking** — property types, request body types, and return types that have a corresponding documentation page are now rendered as Markdown links instead of plain text.
 
 ### Changed
 
 - **Output folder names** — operations pages now live under `api/` (previously `operations/`) and type pages under `resources/` (previously `types/`), aligning with Microsoft Graph documentation conventions.
+- **Enum pages omit JSON representation** — the `## JSON representation` section is no longer emitted for `Enum` types, as a list of members already fully describes the type.
 
 ### Fixed
 

@@ -11,8 +11,8 @@ Version: `{{versionLabel}}`
 ## Resources
 
 {{#if types.length}}
-| Type | Kind | Summary |
-| --- | --- | --- |
+| Type                        | Kind            | Summary                      |
+| --------------------------- | --------------- | ---------------------------- |
 {{#each types}}
 | [{{mdCell name}}]({{path}}) | {{mdCell kind}} | {{mdCell summaryOrFallback}} |
 {{/each}}
@@ -23,8 +23,8 @@ No resource types were found.
 ## Methods
 
 {{#if operations.length}}
-| Method | Container | Returns | Summary |
-| --- | --- | --- | --- |
+| Method                      | Container                 | Returns               | Summary                      |
+| --------------------------- | ------------------------- | --------------------- | ---------------------------- |
 {{#each operations}}
 | [{{mdCell name}}]({{path}}) | {{mdCell containerLabel}} | {{mdCell returnType}} | {{mdCell summaryOrFallback}} |
 {{/each}}

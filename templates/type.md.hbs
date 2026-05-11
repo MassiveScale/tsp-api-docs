@@ -19,24 +19,24 @@ Path: {{join breadcrumbs " > "}}
 
 {{/if}}
 {{#if baseType}}
-Base type: `{{baseType}}`
+Base type: {{baseType}}
 
 {{/if}}
 {{#if methods.length}}
 ## Methods
 
-| Method | Container | Returns | Summary |
-| --- | --- | --- | --- |
+| Method                      | Returns               | Summary                      |
+| --------------------------- | --------------------- | ---------------------------- |
 {{#each methods}}
-| [{{mdCell name}}]({{path}}) | {{mdCell containerLabel}} | {{mdCell returnType}} | {{mdCell summaryOrFallback}} |
+| [{{mdCell name}}]({{path}}) | {{mdCell returnType}} | {{mdCell summaryOrFallback}} |
 {{/each}}
 
 {{/if}}
 {{#if properties.length}}
 ## Properties
 
-| Name | Type | Required | Summary |
-| --- | --- | --- | --- |
+| Name            | Type            | Required                 | Summary                      |
+| ---------------- | ---------------- | ----------------------- | --------------------------- |
 {{#each properties}}
 | {{mdCell name}} | {{mdCell type}} | {{mdCell requiredLabel}} | {{mdCell summaryOrFallback}} |
 {{/each}}
@@ -44,8 +44,8 @@ Base type: `{{baseType}}`
 {{#if variants.length}}
 ## Variants
 
-| Name | Type | Summary |
-| --- | --- | --- |
+| Name            | Type            | Summary                      |
+| --------------- | --------------- | ---------------------------- |
 {{#each variants}}
 | {{mdCell name}} | {{mdCell type}} | {{mdCell summaryOrFallback}} |
 {{/each}}
@@ -53,18 +53,20 @@ Base type: `{{baseType}}`
 {{#if members.length}}
 ## Members
 
-| Name | Value | Summary |
-| --- | --- | --- |
+| Name            | Value            | Summary                      |
+| --------------- | ---------------- | ---------------------------- |
 {{#each members}}
 | {{mdCell name}} | {{mdCell value}} | {{mdCell summaryOrFallback}} |
 {{/each}}
 {{/if}}
+{{#if jsonRepresentation}}
 ## JSON representation
 
 ```json
 {{jsonRepresentation}}
 ```
 
+{{/if}}
 {{#if examples.length}}
 ## Examples
 

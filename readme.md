@@ -8,6 +8,7 @@ Supports multiple output formats targeting Azure DevOps Wiki, GitHub, and DocFx.
 
 - Emits Markdown docs with per-service overview pages, per-operation pages, and per-type pages (models, enums, unions, scalars).
 - Three output formats: `azure-devops` (default), `github`, and `docfx`.
+- Automatically formats Markdown tables with aligned columns.
 - Uses external Handlebars templates from `templates/*.hbs`.
 - Optional root service index page.
 - Versioned API support via `@typespec/versioning`.
@@ -66,14 +67,14 @@ Generates structure compatible with **Azure DevOps Wiki**. Each folder's default
 
 ```text
 tsp-output/
-  index.md                          # root index (render-service-index: true)
+  README.md                         # root index (render-service-index: true)
   <service-slug>/
     <service-slug>.md               # overview — same name as folder
-    operations/
-      operations.md                 # sub-folder index
+    api/
+      api.md                        # sub-folder index
       <Operation>.md
-    types/
-      types.md                      # sub-folder index
+    resources/
+      resources.md                  # sub-folder index
       <Type>.md
 ```
 
@@ -86,10 +87,10 @@ tsp-output/
   README.md                         # root index (render-service-index: true)
   <service-slug>/
     README.md                       # overview
-    operations/
+    api/
       README.md                     # sub-folder index
       <Operation>.md
-    types/
+    resources/
       README.md                     # sub-folder index
       <Type>.md
 ```
@@ -104,10 +105,10 @@ tsp-output/
   toc.yml                           # root TOC (render-service-index: true)
   <service-slug>/
     index.md                        # overview
-    toc.yml                         # service TOC (Overview / Operations / Types)
-    operations/
+    toc.yml                         # service TOC (Overview / API / Resources)
+    api/
       <Operation>.md
-    types/
+    resources/
       <Type>.md
 ```
 
@@ -119,8 +120,8 @@ Templates are external Handlebars files and can be customized:
 - `templates/operation.md.hbs` — operation reference page
 - `templates/type.md.hbs` — type reference page
 - `templates/service-index.md.hbs` — root service index
-- `templates/operations-index.md.hbs` — operations sub-folder index
-- `templates/types-index.md.hbs` — types sub-folder index
+- `templates/operations-index.md.hbs` — `api/` sub-folder index
+- `templates/types-index.md.hbs` — `resources/` sub-folder index
 
 ## Development Notes
 
