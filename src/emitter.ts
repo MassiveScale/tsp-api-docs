@@ -36,6 +36,7 @@ import { unsafe_mutateSubgraphWithNamespace } from "@typespec/compiler/experimen
 import { getHttpOperation, type HttpOperation, type HttpOperationResponse, type HttpStatusCodeRange } from "@typespec/http";
 import { getVersioningMutators, type Version } from "@typespec/versioning";
 import * as HandlebarsModule from "handlebars";
+import { CliPrettify } from "markdown-table-prettify";
 import type { ApiDocsEmitterOptions, OutputFormat } from "./lib.js";
 import {
   operationMarkdownTemplate,
@@ -342,7 +343,7 @@ function rootIndexFileName(format: OutputFormat): string {
   switch (format) {
     case "docfx": return "index.md";
     case "github": return "README.md";
-    default: return "README.md"; // azure-devops
+    default: return "index.md"; // azure-devops
   }
 }
 
@@ -403,28 +404,32 @@ function buildDocFxRootTocContent(services: Array<{ title: string; path: string 
   return lines.join("\n") + "\n";
 }
 
+function prettifyMarkdown(content: string): string {
+  return CliPrettify.prettify(content);
+}
+
 function renderServiceIndex(model: ServiceIndexModel): string {
-  return markdownIndex(model);
+  return prettifyMarkdown(markdownIndex(model));
 }
 
 function renderOverview(model: OverviewPageModel): string {
-  return markdownOverview(model);
+  return prettifyMarkdown(markdownOverview(model));
 }
 
 function renderOperation(model: OperationPageModel): string {
-  return markdownOperation(model);
+  return prettifyMarkdown(markdownOperation(model));
 }
 
 function renderType(model: TypePageModel): string {
-  return markdownType(model);
+  return prettifyMarkdown(markdownType(model));
 }
 
 function renderOperationsIndex(model: OperationsIndexModel): string {
-  return markdownOperationsIndex(model);
+  return prettifyMarkdown(markdownOperationsIndex(model));
 }
 
 function renderTypesIndex(model: TypesIndexModel): string {
-  return markdownTypesIndex(model);
+  return prettifyMarkdown(markdownTypesIndex(model));
 }
 
 function getServiceEntries(program: Program, pageTitlePrefix?: string): ServiceEntry[] {

@@ -184,8 +184,8 @@ describe("tsp-api-docs emitter", () => {
 
       assert.ok(result.outputs["index.md"].includes("## Versioned Services"));
       assert.ok(result.outputs["index.md"].includes("### Widget API"));
-      assert.ok(result.outputs["index.md"].includes("| 1.0 | [Widget API 1.0](1-0/1-0.md) |"));
-      assert.ok(result.outputs["index.md"].includes("| 2.0 | [Widget API 2.0](2-0/2-0.md) |"));
+      assert.ok(result.outputs["index.md"].includes("| 1.0     | [Widget API 1.0](1-0/1-0.md) |"));
+      assert.ok(result.outputs["index.md"].includes("| 2.0     | [Widget API 2.0](2-0/2-0.md) |"));
     });
   });
 
@@ -325,9 +325,9 @@ describe("tsp-api-docs emitter", () => {
 
     const operationPage = result.outputs["widget-api/api/Widgets-Read.md"];
     assert.ok(operationPage.includes("## Optional query parameters"));
-    assert.ok(operationPage.includes("| expand | string | No | No summary provided. |"));
+    assert.ok(operationPage.includes("| expand | string | No       | No summary provided. |"));
     assert.ok(operationPage.includes("## Request headers"));
-    assert.ok(operationPage.includes("| ConsistencyLevel | string | No | No summary provided. |"));
+    assert.ok(operationPage.includes("| ConsistencyLevel | string | No       | No summary provided. |"));
     assert.ok(operationPage.includes("GET /widgets/string?expand=string"));
     assert.ok(operationPage.includes("ConsistencyLevel: string"));
   });
@@ -356,7 +356,7 @@ describe("tsp-api-docs emitter", () => {
     assert.ok(widgetListPage.includes("## Methods"));
     assert.ok(widgetListPage.includes("| [list](../api/Widgets-List.md) |"));
     assert.ok(widgetListPage.includes("## Properties"));
-    assert.ok(widgetListPage.includes("| items | Widget[] | Yes | No summary provided. |"));
+    assert.ok(widgetListPage.includes("| items | Widget[] | Yes      | No summary provided. |"));
     assert.ok(!widgetListPage.includes("## Relationships"));
     assert.ok(!widgetListPage.includes("### items"));
     assert.ok(!widgetListPage.includes("| [read](api/Widgets-Read.md) |"));

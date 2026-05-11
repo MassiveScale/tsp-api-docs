@@ -51,12 +51,12 @@ options:
 
 ### Options
 
-| Option | Type | Default | Description |
-| --- | --- | --- | --- |
-| `emitter-output-dir` | `string` | `./tsp-output` | Output directory for generated files. |
-| `format` | `"azure-devops"` \| `"github"` \| `"docfx"` | `"azure-devops"` | Output format. See [Output Formats](#output-formats) below. |
-| `page-title-prefix` | `string` | — | Fallback title prefix used when the service has no explicit title. |
-| `render-service-index` | `boolean` | `false` | Emit a root index page listing all services. |
+| Option                 | Type                                        | Default          | Description                                                        |
+|------------------------|---------------------------------------------|------------------|--------------------------------------------------------------------|
+| `emitter-output-dir`   | `string`                                    | `./tsp-output`   | Output directory for generated files.                              |
+| `format`               | `"azure-devops"` \| `"github"` \| `"docfx"` | `"azure-devops"` | Output format. See [Output Formats](#output-formats) below.        |
+| `page-title-prefix`    | `string`                                    | —                | Fallback title prefix used when the service has no explicit title. |
+| `render-service-index` | `boolean`                                   | `false`          | Emit a root index page listing all services.                       |
 
 ## Output Formats
 
