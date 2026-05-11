@@ -286,18 +286,18 @@ export async function $onEmit(context: EmitContext<ApiDocsEmitterOptions>) {
     });
 
     if (format === "azure-devops" || format === "github") {
-      const folderIndexName = format === "azure-devops" ? "operations.md" : "README.md";
+      const folderIndexName = format === "azure-devops" ? "api.md" : "README.md";
       if (service.operations.length > 0) {
         await emitFile(program, {
-          path: resolvePath(baseDir, "operations", folderIndexName),
+          path: resolvePath(baseDir, "api", folderIndexName),
           content: renderOperationsIndex(buildOperationsIndexModel(service)),
         });
       }
 
-      const typesIndexName = format === "azure-devops" ? "types.md" : "README.md";
+      const typesIndexName = format === "azure-devops" ? "resources.md" : "README.md";
       if (service.types.length > 0) {
         await emitFile(program, {
-          path: resolvePath(baseDir, "types", typesIndexName),
+          path: resolvePath(baseDir, "resources", typesIndexName),
           content: renderTypesIndex(buildTypesIndexModel(service)),
         });
       }
@@ -312,14 +312,14 @@ export async function $onEmit(context: EmitContext<ApiDocsEmitterOptions>) {
 
     for (const operationPage of service.operations) {
       await emitFile(program, {
-        path: resolvePath(baseDir, "operations", `${operationPage.slug}.md`),
+        path: resolvePath(baseDir, "api", `${operationPage.slug}.md`),
         content: renderOperation(operationPage.page),
       });
     }
 
     for (const typePage of service.types) {
       await emitFile(program, {
-        path: resolvePath(baseDir, "types", `${typePage.slug}.md`),
+        path: resolvePath(baseDir, "resources", `${typePage.slug}.md`),
         content: renderType(typePage.page),
       });
     }
@@ -339,7 +339,11 @@ function overviewFileName(slug: string, format: OutputFormat): string {
 }
 
 function rootIndexFileName(format: OutputFormat): string {
-  return format === "github" ? "README.md" : "index.md";
+  switch (format) {
+    case "docfx": return "index.md";
+    case "github": return "README.md";
+    default: return "README.md"; // azure-devops
+  }
 }
 
 function buildOperationsIndexModel(service: ServiceEntry): OperationsIndexModel {
@@ -350,7 +354,7 @@ function buildOperationsIndexModel(service: ServiceEntry): OperationsIndexModel 
       containerLabel: op.containerLabel,
       returnType: op.returnType,
       summaryOrFallback: op.summaryOrFallback,
-      path: op.path.replace(/^operations\//, ""),
+      path: op.path.replace(/^api\//, ""),
     })),
   };
 }
@@ -362,7 +366,7 @@ function buildTypesIndexModel(service: ServiceEntry): TypesIndexModel {
       name: t.name,
       kind: t.kind,
       summaryOrFallback: t.summaryOrFallback,
-      path: t.path.replace(/^types\//, ""),
+      path: t.path.replace(/^resources\//, ""),
     })),
   };
 }
@@ -372,19 +376,19 @@ function buildDocFxServiceTocContent(service: ServiceEntry): string {
   lines.push(`- name: Overview`);
   lines.push(`  href: index.md`);
   if (service.operations.length > 0) {
-    lines.push(`- name: Operations`);
+    lines.push(`- name: API`);
     lines.push(`  items:`);
     for (const op of service.operations) {
       lines.push(`  - name: ${op.page.title}`);
-      lines.push(`    href: operations/${op.slug}.md`);
+      lines.push(`    href: api/${op.slug}.md`);
     }
   }
   if (service.types.length > 0) {
-    lines.push(`- name: Types`);
+    lines.push(`- name: Resources`);
     lines.push(`  items:`);
     for (const type of service.types) {
       lines.push(`  - name: ${type.page.title}`);
-      lines.push(`    href: types/${type.slug}.md`);
+      lines.push(`    href: resources/${type.slug}.md`);
     }
   }
   return lines.join("\n") + "\n";
@@ -492,7 +496,7 @@ function collectServiceEntry(
       };
     });
 
-  const operationPathById = new Map(operationPages.map((item, index) => [operations[index].id, `operations/${item.slug}.md`]));
+  const operationPathById = new Map(operationPages.map((item, index) => [operations[index].id, `api/${item.slug}.md`]));
 
   const relatedMethodsByTypeId = buildRelatedMethodsByType(program, types, operations, operationPathById);
 
@@ -505,7 +509,7 @@ function collectServiceEntry(
         page: buildTypePage(program, typeEntry.type, relatedMethodsByTypeId.get(typeEntry.id) ?? [], version?.value),
       };
     });
-  const typePathById = new Map(typePages.map((item, index) => [types[index].id, `types/${item.slug}.md`]));
+  const typePathById = new Map(typePages.map((item, index) => [types[index].id, `resources/${item.slug}.md`]));
 
   const overview: OverviewPageModel = {
     title: serviceLabel,
