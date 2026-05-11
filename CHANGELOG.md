@@ -7,16 +7,32 @@ This project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.2.1] — 2026-05-11
+
+### Added
+
+- **Automatic table formatting** — all generated Markdown tables are now column-aligned using `markdown-table-prettify` for improved readability.
+
+### Changed
+
+- **Output folder names** — operations pages now live under `api/` (previously `operations/`) and type pages under `resources/` (previously `types/`), aligning with Microsoft Graph documentation conventions.
+
+### Fixed
+
+- The root service index was incorrectly emitted as `index.md` instead of `README.md` in `azure-devops` format when `render-service-index` is enabled.
+
+---
+
 ## [0.2.0] — 2026-05-10
 
 ### Added
 
 - **`format` emitter option** — choose the output structure to match your documentation platform:
-  - `azure-devops` *(default)* — folder landing pages use the folder name (e.g. `<slug>/<slug>.md`, `operations/operations.md`, `types/types.md`) for Azure DevOps Wiki compatibility.
+  - `azure-devops` *(default)* — folder landing pages use the folder name (e.g. `<slug>/<slug>.md`, `api/api.md`, `resources/resources.md`) for Azure DevOps Wiki compatibility.
   - `github` — folder landing pages are `README.md` so GitHub renders them automatically when browsing directories.
   - `docfx` — folder landing pages are `index.md`; each service folder also gets a `toc.yml` table of contents. When `render-service-index` is enabled a root `toc.yml` is emitted as well.
-- **Operations sub-folder index page** — a summary table of all operations in a service is now emitted alongside the individual operation pages (`operations/operations.md` / `operations/README.md`).
-- **Types sub-folder index page** — a summary table of all types in a service is now emitted alongside the individual type pages (`types/types.md` / `types/README.md`).
+- **Operations sub-folder index page** — a summary table of all operations in a service is now emitted alongside the individual operation pages (`api/api.md` / `api/README.md`).
+- **Types sub-folder index page** — a summary table of all types in a service is now emitted alongside the individual type pages (`resources/resources.md` / `resources/README.md`).
 - **`templates/operations-index.md.hbs`** — Handlebars template for the operations index page.
 - **`templates/types-index.md.hbs`** — Handlebars template for the types index page.
 

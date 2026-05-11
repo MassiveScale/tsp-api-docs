@@ -97,7 +97,7 @@ describe("tsp-api-docs emitter", () => {
         op getWidget(id: string): Widget;
       `);
 
-      assert.ok(result.outputs["index.md"].includes("[Widget API](widget-api/widget-api.md)"));
+      assert.ok(result.outputs["README.md"].includes("[Widget API](widget-api/widget-api.md)"));
     });
 
     it("renders documentation sets for each service version", async () => {
@@ -182,10 +182,10 @@ describe("tsp-api-docs emitter", () => {
         }
       `);
 
-      assert.ok(result.outputs["index.md"].includes("## Versioned Services"));
-      assert.ok(result.outputs["index.md"].includes("### Widget API"));
-      assert.ok(result.outputs["index.md"].includes("| 1.0     | [Widget API 1.0](1-0/1-0.md) |"));
-      assert.ok(result.outputs["index.md"].includes("| 2.0     | [Widget API 2.0](2-0/2-0.md) |"));
+      assert.ok(result.outputs["README.md"].includes("## Versioned Services"));
+      assert.ok(result.outputs["README.md"].includes("### Widget API"));
+      assert.ok(result.outputs["README.md"].includes("| 1.0     | [Widget API 1.0](1-0/1-0.md) |"));
+      assert.ok(result.outputs["README.md"].includes("| 2.0     | [Widget API 2.0](2-0/2-0.md) |"));
     });
   });
 

@@ -342,8 +342,7 @@ function overviewFileName(slug: string, format: OutputFormat): string {
 function rootIndexFileName(format: OutputFormat): string {
   switch (format) {
     case "docfx": return "index.md";
-    case "github": return "README.md";
-    default: return "index.md"; // azure-devops
+    default: return "README.md"; // azure-devops, github
   }
 }
 
