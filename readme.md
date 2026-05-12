@@ -120,7 +120,8 @@ Templates are external Handlebars files and can be customized:
 
 - `templates/overview.md.hbs` — service overview page
 - `templates/operation.md.hbs` — operation reference page
-- `templates/type.md.hbs` — type reference page
+- `templates/type.md.hbs` — type reference page (models, unions, scalars)
+- `templates/enum.md.hbs` — enum type reference page
 - `templates/service-index.md.hbs` — root service index
 - `templates/operations-index.md.hbs` — `api/` sub-folder index
 - `templates/types-index.md.hbs` — `resources/` sub-folder index

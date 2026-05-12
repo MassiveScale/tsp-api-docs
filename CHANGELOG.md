@@ -7,6 +7,14 @@ This project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.2.3] — 2026-05-12
+
+### Added
+
+- **Separate enum template** — enum type pages are now rendered using a dedicated `templates/enum.md.hbs` template instead of the shared `type.md.hbs`. The enum template focuses on the `## Members` table and omits sections irrelevant to enums (properties, variants, base type, JSON representation).
+
+---
+
 ## [0.2.2] — 2026-05-11
 
 ### Added

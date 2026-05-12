@@ -7,6 +7,7 @@ const templateDir = resolveTemplateDir();
 export const overviewMarkdownTemplate = loadTemplate("overview.md.hbs");
 export const operationMarkdownTemplate = loadTemplate("operation.md.hbs");
 export const typeMarkdownTemplate = loadTemplate("type.md.hbs");
+export const enumMarkdownTemplate = loadTemplate("enum.md.hbs");
 export const serviceIndexMarkdownTemplate = loadTemplate("service-index.md.hbs");
 export const operationsIndexMarkdownTemplate = loadTemplate("operations-index.md.hbs");
 export const typesIndexMarkdownTemplate = loadTemplate("types-index.md.hbs");

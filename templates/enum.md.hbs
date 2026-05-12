@@ -1,0 +1,45 @@
+# {{title}}
+
+{{#if summary}}
+{{summary}}
+
+{{/if}}
+{{#if deprecated}}
+Deprecated: {{deprecated}}
+
+{{/if}}
+{{#if versionLabel}}
+Version: `{{versionLabel}}`
+
+{{/if}}
+Kind: Enum
+
+{{#if breadcrumbs.length}}
+Path: {{join breadcrumbs " > "}}
+
+{{/if}}
+{{#if members.length}}
+## Members
+
+| Name            | Value            | Summary                      |
+| --------------- | ---------------- | ---------------------------- |
+{{#each members}}
+| {{mdCell name}} | {{mdCell value}} | {{mdCell summaryOrFallback}} |
+{{/each}}
+{{/if}}
+{{#if examples.length}}
+## Examples
+
+{{#each examples}}
+### {{title}}
+
+{{#if description}}
+{{description}}
+
+{{/if}}
+```json
+{{json}}
+```
+
+{{/each}}
+{{/if}}

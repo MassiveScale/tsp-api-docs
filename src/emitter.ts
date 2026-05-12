@@ -39,6 +39,7 @@ import * as HandlebarsModule from "handlebars";
 import { CliPrettify } from "markdown-table-prettify";
 import type { ApiDocsEmitterOptions, OutputFormat } from "./lib.js";
 import {
+  enumMarkdownTemplate,
   operationMarkdownTemplate,
   operationsIndexMarkdownTemplate,
   overviewMarkdownTemplate,
@@ -215,6 +216,7 @@ const Handlebars =
 const markdownOverview = compileTemplate<OverviewPageModel>(overviewMarkdownTemplate);
 const markdownOperation = compileTemplate<OperationPageModel>(operationMarkdownTemplate);
 const markdownType = compileTemplate<TypePageModel>(typeMarkdownTemplate);
+const markdownEnum = compileTemplate<TypePageModel>(enumMarkdownTemplate);
 const markdownIndex = compileTemplate<ServiceIndexModel>(serviceIndexMarkdownTemplate);
 const markdownOperationsIndex = compileTemplate<OperationsIndexModel>(operationsIndexMarkdownTemplate);
 const markdownTypesIndex = compileTemplate<TypesIndexModel>(typesIndexMarkdownTemplate);
@@ -478,7 +480,8 @@ function renderOperation(model: OperationPageModel): string {
 }
 
 function renderType(model: TypePageModel): string {
-  return prettifyMarkdown(markdownType(model));
+  const template = model.kind === "Enum" ? markdownEnum : markdownType;
+  return prettifyMarkdown(template(model));
 }
 
 function renderOperationsIndex(model: OperationsIndexModel): string {
