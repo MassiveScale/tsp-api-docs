@@ -12,6 +12,8 @@ Supports multiple output formats targeting Azure DevOps Wiki, GitHub, and DocFx.
 - Uses external Handlebars templates from `templates/*.hbs`.
 - Optional root service index page.
 - Versioned API support via `@typespec/versioning`.
+- Response headers documented per operation.
+- Request body examples automatically omit read-only and immutable properties based on HTTP verb visibility.
 
 ## Prerequisites
 

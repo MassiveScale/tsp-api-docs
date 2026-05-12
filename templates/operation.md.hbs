@@ -87,11 +87,7 @@ Don't supply a request body for this method.
 
 {{/if}}
 
-## Signature
-
-`{{signature}}`
-
-## Parameters
+### Parameters
 
 {{#if parameters.length}}
 | Name            | Type             | Required                | Summary                      |
@@ -103,12 +99,29 @@ Don't supply a request body for this method.
 This method does not declare request parameters.
 {{/if}}
 {{#if errorsDoc}}
+
+## Response headers
+
+{{#if responseHeaders.length}}
+| Name             | Type           | Required                 | Summary                      |
+| ---------------- | -------------- | ------------------------ | ---------------------------- |
+{{#each responseHeaders}}
+| {{mdCell name}} | {{mdCell type}} | {{mdCell requiredLabel}} | {{mdCell summaryOrFallback}} |
+{{/each}}
+
+{{else}}
+This method does not return custom response headers.
+
+{{/if}}
+
+
 ## Errors
 
 {{errorsDoc}}
 
 {{/if}}
 {{#if examples.length}}
+
 ## Examples
 
 {{#each examples}}
@@ -118,6 +131,7 @@ This method does not declare request parameters.
 {{description}}
 
 {{/if}}
+
 #### Request
 
 ```http

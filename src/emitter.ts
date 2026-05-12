@@ -33,7 +33,7 @@ import {
   walkPropertiesInherited,
 } from "@typespec/compiler";
 import { unsafe_mutateSubgraphWithNamespace } from "@typespec/compiler/experimental";
-import { getHttpOperation, type HttpOperation, type HttpOperationResponse, type HttpStatusCodeRange } from "@typespec/http";
+import { getHttpOperation, isVisible, resolveRequestVisibility, Visibility, type HttpOperation, type HttpOperationResponse, type HttpStatusCodeRange } from "@typespec/http";
 import { getVersioningMutators, type Version } from "@typespec/versioning";
 import * as HandlebarsModule from "handlebars";
 import { CliPrettify } from "markdown-table-prettify";
@@ -139,6 +139,7 @@ interface OperationPageModel {
   requestBody?: RequestBodyDoc;
   returnType: string;
   responses: ResponseDoc[];
+  responseHeaders: HttpParameterDoc[];
   returnsDoc?: string;
   errorsDoc?: string;
   examples: OperationExampleDoc[];
@@ -760,8 +761,9 @@ function buildOperationPage(
     signature: `${operation.name}(${formatParametersSignature(program, operation.parameters)}) => ${typeReference(program, operation.returnType)}`,
     parameters: modelProperties(program, operation.parameters, makeRef),
     requestBody: buildRequestBodyDoc(program, httpOperation, makeRef),
-    returnType: makeRef(operation.returnType),
+    returnType: buildOperationReturnType(program, operation, httpOperation, makeRef),
     responses: buildResponseDocs(program, operation, httpOperation, makeRef),
+    responseHeaders: buildResponseHeaderDocs(program, httpOperation, makeRef),
     returnsDoc: getReturnsDoc(program, operation),
     errorsDoc: undefined,
     examples: operationExamples(program, operation, httpOperation),
@@ -791,12 +793,13 @@ function buildRequestBodyDoc(
     return undefined;
   }
 
+  const visibility = resolveRequestVisibility(program, httpOperation!.operation, httpOperation!.verb);
   const typeName = makeRef(body.type);
   return {
     type: typeName,
     contentTypes: body.contentTypes.length > 0 ? [...body.contentTypes] : ["application/json"],
     description: `Supply a request body of type ${typeName}.`,
-    jsonExample: body.bodyKind === "single" ? JSON.stringify(jsonValueForType(program, body.type, new Set<Type>()), null, 2) : undefined,
+    jsonExample: body.bodyKind === "single" ? JSON.stringify(jsonValueForType(program, body.type, new Set<Type>(), visibility), null, 2) : undefined,
   };
 }
 
@@ -840,6 +843,47 @@ function buildHeaderDocs(
     }));
 }
 
+/**
+ * Extracts the rendered body type(s) from an HTTP operation response.
+ * Returns a " | "-joined string of body type refs, or "void" if there is no body.
+ */
+function httpResponseBodyType(response: HttpOperationResponse, makeRef: (type: Type) => string): string {
+  const bodyTypes = response.responses
+    .filter((content) => content.body)
+    .map((content) => makeRef(content.body!.type));
+  return bodyTypes.length > 0 ? [...new Set(bodyTypes)].join(" | ") : "void";
+}
+
+/**
+ * Builds the primary return type string for an operation page.
+ * For HTTP operations, collects unique body types across all success responses.
+ * Falls back to the raw TypeSpec return type when no HTTP body is present.
+ */
+function buildOperationReturnType(
+  program: Program,
+  operation: Operation,
+  httpOperation: HttpOperation | undefined,
+  makeRef: (type: Type) => string,
+): string {
+  if (!httpOperation) {
+    return makeRef(operation.returnType);
+  }
+
+  const bodyTypes: string[] = [];
+  for (const response of httpOperation.responses) {
+    for (const content of response.responses) {
+      if (content.body) {
+        const ref = makeRef(content.body.type);
+        if (!bodyTypes.includes(ref)) {
+          bodyTypes.push(ref);
+        }
+      }
+    }
+  }
+
+  return bodyTypes.length > 0 ? bodyTypes.join(" | ") : makeRef(operation.returnType);
+}
+
 function buildResponseDocs(
   program: Program,
   operation: Operation,
@@ -858,9 +902,46 @@ function buildResponseDocs(
 
   return httpOperation.responses.map((response) => ({
     statusCode: formatStatusCode(response.statusCodes),
-    type: makeRef(response.type),
+    type: httpResponseBodyType(response, makeRef),
     description: response.description ?? getSummary(program, response.type) ?? getDoc(program, response.type) ?? FALLBACK_SUMMARY,
   }));
+}
+
+/**
+ * Collects unique response headers across all HTTP responses for an operation.
+ * Deduplicates by header name so a header that appears on multiple status codes
+ * is listed only once.
+ */
+function buildResponseHeaderDocs(
+  program: Program,
+  httpOperation: HttpOperation | undefined,
+  makeRef: (type: Type) => string,
+): HttpParameterDoc[] {
+  if (!httpOperation) {
+    return [];
+  }
+
+  const seen = new Set<string>();
+  const docs: HttpParameterDoc[] = [];
+
+  for (const response of httpOperation.responses) {
+    for (const content of response.responses) {
+      if (!content.headers) continue;
+      for (const [name, prop] of Object.entries(content.headers)) {
+        if (seen.has(name)) continue;
+        seen.add(name);
+        docs.push({
+          name,
+          type: makeRef(prop.type),
+          requiredLabel: prop.optional ? "No" : "Yes",
+          summary: getSummary(program, prop) ?? getDoc(program, prop),
+          summaryOrFallback: describeSummary(program, prop),
+        });
+      }
+    }
+  }
+
+  return docs;
 }
 
 function buildTypePage(
@@ -1024,7 +1105,7 @@ function sameType(left: Type, right: Model | Enum | Union | Scalar): boolean {
   return left === right;
 }
 
-function jsonRepresentationForType(program: Program, type: Model | Enum | Union | Scalar, visited = new Set<Type>()): unknown {
+function jsonRepresentationForType(program: Program, type: Model | Enum | Union | Scalar, visited = new Set<Type>(), visibilityFilter?: Visibility): unknown {
   if (visited.has(type)) {
     return typeReference(program, type);
   }
@@ -1035,7 +1116,11 @@ function jsonRepresentationForType(program: Program, type: Model | Enum | Union 
     case "Model": {
       const jsonObject: Record<string, unknown> = {};
       for (const property of walkPropertiesInherited(type)) {
-        jsonObject[property.name] = jsonValueForType(program, property.type, visited);
+        // Skip properties that are not writable for the current request visibility
+        if (visibilityFilter !== undefined && !isVisible(program, property, visibilityFilter)) {
+          continue;
+        }
+        jsonObject[property.name] = jsonValueForType(program, property.type, visited, visibilityFilter);
       }
       return jsonObject;
     }
@@ -1045,14 +1130,14 @@ function jsonRepresentationForType(program: Program, type: Model | Enum | Union 
     }
     case "Union": {
       const firstVariant = [...type.variants.values()][0];
-      return firstVariant ? jsonValueForType(program, firstVariant.type, visited) : type.name ?? "union";
+      return firstVariant ? jsonValueForType(program, firstVariant.type, visited, visibilityFilter) : type.name ?? "union";
     }
     case "Scalar":
       return scalarPlaceholder(type);
   }
 }
 
-function jsonValueForType(program: Program, type: Type, visited: Set<Type>): unknown {
+function jsonValueForType(program: Program, type: Type, visited: Set<Type>, visibilityFilter?: Visibility): unknown {
   switch (type.kind) {
     case "String":
       return type.value;
@@ -1061,24 +1146,24 @@ function jsonValueForType(program: Program, type: Type, visited: Set<Type>): unk
     case "Boolean":
       return type.value;
     case "Tuple":
-      return type.values.map((value) => jsonValueForType(program, value, visited));
+      return type.values.map((value) => jsonValueForType(program, value, visited, visibilityFilter));
     case "Model":
       if (isArrayModelType(program, type)) {
         const itemType = type.indexer?.value ?? [...type.properties.values()][0]?.type;
-        return [itemType ? jsonValueForType(program, itemType, visited) : "unknown"];
+        return [itemType ? jsonValueForType(program, itemType, visited, visibilityFilter) : "unknown"];
       }
       if (isRecordModelType(program, type)) {
         const valueType = type.indexer?.value;
-        return { property: valueType ? jsonValueForType(program, valueType, visited) : "unknown" };
+        return { property: valueType ? jsonValueForType(program, valueType, visited, visibilityFilter) : "unknown" };
       }
-      return jsonRepresentationForType(program, type, new Set(visited));
+      return jsonRepresentationForType(program, type, new Set(visited), visibilityFilter);
     case "Union": {
       const firstVariant = [...type.variants.values()][0];
-      return firstVariant ? jsonValueForType(program, firstVariant.type, visited) : type.name ?? "union";
+      return firstVariant ? jsonValueForType(program, firstVariant.type, visited, visibilityFilter) : type.name ?? "union";
     }
     case "Enum":
     case "Scalar":
-      return jsonRepresentationForType(program, type, new Set(visited));
+      return jsonRepresentationForType(program, type, new Set(visited), visibilityFilter);
     default:
       return typeReference(program, type);
   }
@@ -1185,11 +1270,12 @@ function buildHttpRequestExample(program: Program, httpOperation: HttpOperation 
     return "HTTP metadata is not available for this operation.";
   }
 
+  const visibilityFilter = resolveRequestVisibility(program, httpOperation.operation, httpOperation.verb);
   const sampleValues = resolveHttpParameterValues(program, httpOperation, parameterValues);
   const lines = [formatHttpRequestExampleLine(httpOperation, sampleValues)];
   const headerLines = buildRequestHeaderExampleLines(httpOperation, sampleValues);
   const body = httpOperation.parameters.body;
-  const bodyValue = body ? extractRequestBodyValue(program, httpOperation, sampleValues) : undefined;
+  const bodyValue = body ? extractRequestBodyValue(program, httpOperation, sampleValues, visibilityFilter) : undefined;
 
   lines.push(...headerLines);
 
@@ -1296,7 +1382,7 @@ function sampleValueForType(program: Program, type: Type): unknown {
   return jsonValueForType(program, type, new Set<Type>());
 }
 
-function extractRequestBodyValue(program: Program, httpOperation: HttpOperation, parameterValues?: unknown): unknown {
+function extractRequestBodyValue(program: Program, httpOperation: HttpOperation, parameterValues?: unknown, visibilityFilter?: Visibility): unknown {
   const body = httpOperation.parameters.body;
   if (!body) {
     return undefined;
@@ -1307,7 +1393,7 @@ function extractRequestBodyValue(program: Program, httpOperation: HttpOperation,
     return values[body.property.name];
   }
 
-  return body.bodyKind === "single" ? jsonValueForType(program, body.type, new Set<Type>()) : undefined;
+  return body.bodyKind === "single" ? jsonValueForType(program, body.type, new Set<Type>(), visibilityFilter) : undefined;
 }
 
 function inferResponseBodyValue(program: Program, responseContent: HttpOperationResponse["responses"][number] | undefined): unknown {

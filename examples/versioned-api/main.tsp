@@ -14,30 +14,38 @@ enum Versions {
   v2_0: "v2.0",
 }
 
-
 /** A widget is a small gadget that does something useful. */
 model Widget {
   @doc("Unique identifier for the widget")
+  @visibility(Lifecycle.Read)
   id: string;
+
   @doc("Name of the widget")
   @added(Versions.v1_1)
   name: string;
+
   @doc("Weight of the widget in grams")
+  @visibility(Lifecycle.Read, Lifecycle.Update)
   weight: int32;
+
   @doc("Color of the widget")
-  color: "red" | "blue";  
-  @doc("Size of the widget")  
+  color: "red" | "blue";
+
+  @doc("Size of the widget")
+  @visibility(Lifecycle.Read, Lifecycle.Create)
   size: Size;
 }
 
 @doc("Size of a widget")
 enum Size {
   @doc("Small size, suitable for travel")
-  Small;
+  Small,
+
   @doc("Medium size, suitable for home use")
-  Medium;
+  Medium,
+
   @doc("Large size, suitable for industrial use")
-  Large;
+  Large,
 }
 
 @doc("List of widgets")
@@ -51,6 +59,7 @@ model WidgetList {
 model Error {
   @doc("HTTP status code of the error")
   code: int32;
+
   @doc("Error message describing the problem")
   message: string;
 }
@@ -60,6 +69,7 @@ model Error {
 model AnalyzeResult {
   @doc("Unique identifier of the analyzed widget")
   id: string;
+
   @doc("Analysis result as a string")
   analysis: string;
 }
@@ -76,7 +86,11 @@ interface Widgets {
   /** Create a widget */
   @added(Versions.v1_1)
   @post
-  create(@body body: Widget): Widget;
+  create(@body body: Widget): {
+    @statusCode statusCode: 201;
+    @header eTag: string;
+    @body body: Widget;
+  };
 
   /** Update a widget */
   @added(Versions.v1_1)

@@ -7,6 +7,22 @@ This project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.2.2] — 2026-05-11
+
+### Added
+
+- **Response headers section** — operation pages now include a `## Response headers` table listing any custom headers returned by the operation (name, type, required, summary).
+- **Visibility-aware request body examples** — request body JSON examples now omit properties that callers cannot supply:
+  - `POST` operations exclude read-only properties (`@visibility("read")`).
+  - `PATCH` / `put` operations exclude read-only and immutable (create-only) properties.
+  This uses `resolveRequestVisibility` and `isVisible` from `@typespec/http`.
+
+### Fixed
+
+- **Anonymous HTTP response type rendering** — the `Response` table and the operation return type now show the actual body type (e.g. `[Widget](../resources/Widget.md)`) instead of the raw anonymous model (`{ statusCode: 201; eTag: string; body: Widget }`).
+
+---
+
 ## [0.2.1] — 2026-05-11
 
 ### Added

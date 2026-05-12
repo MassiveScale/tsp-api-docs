@@ -41,3 +41,6 @@ The output structure mirrors Microsoft Graph style reference docs.
   - `npm test`
 - After code changes, rebuild the example typespec projects under `examples/`
 
+> [IMPORTANT!]
+> Always update the CHANGELOG and README after making changes
+
