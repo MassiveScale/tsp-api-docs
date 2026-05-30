@@ -9,9 +9,11 @@ Supports multiple output formats targeting Azure DevOps Wiki, GitHub, and DocFx.
 - Emits Markdown docs with per-service overview pages, per-operation pages, and per-type pages (models, enums, unions, scalars).
 - Three output formats: `azure-devops` (default), `github`, and `docfx`.
 - Automatically formats Markdown tables with aligned columns.
-- Uses external Handlebars templates from `templates/*.hbs`.
+- External Handlebars templates — override any built-in template with a custom `.hbs` file.
 - Optional root service index page.
 - Versioned API support via `@typespec/versioning`.
+- Optional `api-name` prefix for versioned file/folder slugs (e.g. `my-api-v1-0/`).
+- Configurable `route-prefix` with `{version}` token substitution for HTTP request lines (default: `api/{version}`).
 - Response headers documented per operation.
 - Request body examples automatically omit read-only and immutable properties based on HTTP verb visibility.
 
@@ -54,12 +56,15 @@ options:
 
 ### Options
 
-| Option                 | Type                                        | Default          | Description                                                        |
-|------------------------|---------------------------------------------|------------------|--------------------------------------------------------------------|
-| `emitter-output-dir`   | `string`                                    | `./tsp-output`   | Output directory for generated files.                              |
-| `format`               | `"azure-devops"` \| `"github"` \| `"docfx"` | `"azure-devops"` | Output format. See [Output Formats](#output-formats) below.        |
-| `page-title-prefix`    | `string`                                    | —                | Fallback title prefix used when the service has no explicit title. |
-| `render-service-index` | `boolean`                                   | `false`          | Emit a root index page listing all services.                       |
+| Option                 | Type                                        | Default          | Description                                                                                                               |
+| ---------------------- | ------------------------------------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `emitter-output-dir`   | `string`                                    | `./tsp-output`   | Output directory for generated files.                                                                                     |
+| `format`               | `"azure-devops"` \| `"github"` \| `"docfx"` | `"azure-devops"` | Output format. See [Output Formats](#output-formats) below.                                                               |
+| `page-title-prefix`    | `string`                                    | —                | Fallback title prefix used when the service has no explicit title.                                                        |
+| `render-service-index` | `boolean`                                   | `false`          | Emit a root index page listing all services.                                                                              |
+| `api-name`             | `string`                                    | —                | API name prefix for file/folder slugs. See [API Name](#api-name) below.                                                   |
+| `route-prefix`         | `string`                                    | `api/{version}`  | Prefix prepended to HTTP request paths. Supports `{version}` token substitution. See [Route Prefix](#route-prefix) below. |
+| `templates`            | `TemplateOverrides`                         | —                | Per-template path overrides for custom Handlebars templates. See [Custom Templates](#custom-templates) below.             |
 
 ## Output Formats
 
@@ -114,17 +119,114 @@ tsp-output/
       <Type>.md
 ```
 
-## Templates
+## API Name
 
-Templates are external Handlebars files and can be customized:
+The `api-name` option provides a consistent prefix for file and folder slugs, which is useful when the TypeSpec service title differs from how you want the output organized.
 
-- `templates/overview.md.hbs` — service overview page
-- `templates/operation.md.hbs` — operation reference page
-- `templates/type.md.hbs` — type reference page (models, unions, scalars)
-- `templates/enum.md.hbs` — enum type reference page
-- `templates/service-index.md.hbs` — root service index
-- `templates/operations-index.md.hbs` — `api/` sub-folder index
-- `templates/types-index.md.hbs` — `resources/` sub-folder index
+```yaml
+options:
+  "@massivescale/tsp-api-docs":
+    api-name: "My Awesome API"
+```
+
+**Non-versioned service** — the slug is derived from `api-name` instead of the service title:
+
+```text
+my-awesome-api.md
+my-awesome-api/
+  api/Get-Widget.md
+  resources/Widget.md
+```
+
+**Versioned service** — the slug is `<api-name> <version>` slugified:
+
+```text
+my-awesome-api-v1-0.md        # version 1.0 folder and overview
+my-awesome-api-v2-0.md        # version 2.0 folder and overview
+```
+
+When `render-service-index` is also enabled, versioned entries are grouped under the `api-name` heading in the index.
+
+The combined label (e.g. `"My Awesome API v1.0"`) is also exposed to all templates as the `{{apiName}}` variable so custom templates can reference it.
+
+## Route Prefix
+
+The `route-prefix` option controls the path prefix shown in HTTP request lines on operation pages. It supports a `{version}` token that is substituted with the actual API version value for versioned services.
+
+The default value is `api/{version}`:
+
+```yaml
+options:
+  "@massivescale/tsp-api-docs":
+    route-prefix: "api/{version}"
+```
+
+**Non-versioned service** — `{version}` resolves to an empty string, giving just `api`:
+
+```http
+GET /api/widgets/{id}
+```
+
+**Versioned service at v1.0** — `{version}` is substituted with `1.0`:
+
+```http
+GET /api/1.0/widgets/{id}
+```
+
+To use a custom prefix pattern:
+
+```yaml
+options:
+  "@massivescale/tsp-api-docs":
+    route-prefix: "v{version}/rest"
+```
+
+To emit bare paths with no prefix, set `route-prefix` to an empty string:
+
+```yaml
+options:
+  "@massivescale/tsp-api-docs":
+    route-prefix: ""
+```
+
+## Custom Templates
+
+Any of the built-in Handlebars templates can be replaced by specifying a path to a custom `.hbs` file. Paths are resolved relative to the directory where `tsp compile` is run.
+
+```yaml
+options:
+  "@massivescale/tsp-api-docs":
+    templates:
+      overview: ./my-templates/overview.md.hbs
+      operation: ./my-templates/operation.md.hbs
+```
+
+Only the templates you list are overridden; all others continue to use the built-in defaults.
+
+### Available template keys
+
+| Key                | Built-in file                       | Renders                             |
+| ------------------ | ----------------------------------- | ----------------------------------- |
+| `overview`         | `templates/overview.md.hbs`         | Service overview page               |
+| `operation`        | `templates/operation.md.hbs`        | Individual operation reference page |
+| `type`             | `templates/type.md.hbs`             | Type page (models, unions, scalars) |
+| `enum`             | `templates/enum.md.hbs`             | Enum type page                      |
+| `service-index`    | `templates/service-index.md.hbs`    | Root service index                  |
+| `operations-index` | `templates/operations-index.md.hbs` | `api/` sub-folder index             |
+| `types-index`      | `templates/types-index.md.hbs`      | `resources/` sub-folder index       |
+
+### Template variables
+
+All templates receive the standard view model for their page type. The following variables are common across all page templates:
+
+| Variable       | Description                                                                                         |
+| -------------- | --------------------------------------------------------------------------------------------------- |
+| `title`        | Page title (service label, operation name, or type name).                                           |
+| `summary`      | Doc summary from the TypeSpec `@summary` decorator, if present.                                     |
+| `versionLabel` | The API version string (e.g. `"v1.0"`), present only on versioned services.                         |
+| `apiName`      | The full `api-name`-prefixed label (e.g. `"My Awesome API v1.0"`). `undefined` when not configured. |
+
+Refer to the built-in templates in `templates/` for the full variable list for each page type.
 
 ## Development Notes
 

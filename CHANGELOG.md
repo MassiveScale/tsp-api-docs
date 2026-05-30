@@ -7,6 +7,23 @@ This project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.2.5] — 2026-05-30
+
+### Added
+
+- **`route-prefix` option** — configurable prefix prepended to all HTTP request paths on operation pages. Supports a `{version}` token that is substituted with the API version value for versioned services (e.g. `api/{version}` + version `1.0` → `/api/1.0/widgets/{id}`). For non-versioned services, `{version}` resolves to an empty string (e.g. `api/{version}` → `/api/widgets/{id}`). Default is `api/{version}`. Set to `""` to emit bare paths.
+
+---
+
+## [0.2.4] — 2026-05-21
+
+### Added
+
+- **`api-name` option** — optional API name prefix for file and folder slugs. When set, non-versioned services use `slugify(api-name)` as the folder name; versioned services use `slugify("<api-name> <version>")` (e.g. `my-awesome-api-v1-0/`). When `render-service-index` is enabled, versioned entries are grouped under the `api-name` heading. The combined label is also available in every template as `{{apiName}}`.
+- **Custom templates** — any of the seven built-in Handlebars templates can now be replaced with a custom `.hbs` file via the new `templates` option. Paths are resolved relative to `process.cwd()`. Templates not listed fall back to the built-in defaults. Load failures are reported as TypeSpec diagnostics.
+
+---
+
 ## [0.2.3] — 2026-05-12
 
 ### Added
@@ -23,7 +40,7 @@ This project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Visibility-aware request body examples** — request body JSON examples now omit properties that callers cannot supply:
   - `POST` operations exclude read-only properties (`@visibility("read")`).
   - `PATCH` / `put` operations exclude read-only and immutable (create-only) properties.
-  This uses `resolveRequestVisibility` and `isVisible` from `@typespec/http`.
+    This uses `resolveRequestVisibility` and `isVisible` from `@typespec/http`.
 
 ### Fixed
 
@@ -55,7 +72,7 @@ This project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Added
 
 - **`format` emitter option** — choose the output structure to match your documentation platform:
-  - `azure-devops` *(default)* — folder landing pages use the folder name (e.g. `<slug>/<slug>.md`, `api/api.md`, `resources/resources.md`) for Azure DevOps Wiki compatibility.
+  - `azure-devops` _(default)_ — folder landing pages use the folder name (e.g. `<slug>/<slug>.md`, `api/api.md`, `resources/resources.md`) for Azure DevOps Wiki compatibility.
   - `github` — folder landing pages are `README.md` so GitHub renders them automatically when browsing directories.
   - `docfx` — folder landing pages are `index.md`; each service folder also gets a `toc.yml` table of contents. When `render-service-index` is enabled a root `toc.yml` is emitted as well.
 - **Operations sub-folder index page** — a summary table of all operations in a service is now emitted alongside the individual operation pages (`api/api.md` / `api/README.md`).

@@ -14,6 +14,7 @@ import {
   isRecordModelType,
   isTemplateDeclaration,
   listServices,
+  NoTarget,
   resolvePath,
   serializeValueAsJson,
   type Enum,
@@ -33,20 +34,25 @@ import {
   walkPropertiesInherited,
 } from "@typespec/compiler";
 import { unsafe_mutateSubgraphWithNamespace } from "@typespec/compiler/experimental";
-import { getHttpOperation, isVisible, resolveRequestVisibility, Visibility, type HttpOperation, type HttpOperationResponse, type HttpStatusCodeRange } from "@typespec/http";
+import {
+  getHttpOperation,
+  isVisible,
+  resolveRequestVisibility,
+  Visibility,
+  type HttpOperation,
+  type HttpOperationResponse,
+  type HttpStatusCodeRange,
+} from "@typespec/http";
 import { getVersioningMutators, type Version } from "@typespec/versioning";
 import * as HandlebarsModule from "handlebars";
 import { CliPrettify } from "markdown-table-prettify";
-import type { ApiDocsEmitterOptions, OutputFormat } from "./lib.js";
-import {
-  enumMarkdownTemplate,
-  operationMarkdownTemplate,
-  operationsIndexMarkdownTemplate,
-  overviewMarkdownTemplate,
-  serviceIndexMarkdownTemplate,
-  typeMarkdownTemplate,
-  typesIndexMarkdownTemplate,
-} from "./templates.js";
+import type {
+  ApiDocsEmitterOptions,
+  OutputFormat,
+  TemplateOverrides,
+} from "./lib.js";
+import { reportDiagnostic } from "./lib.js";
+import { loadTemplates } from "./templates.js";
 
 interface RenderedDoc {
   path: string;
@@ -131,6 +137,7 @@ interface OperationPageModel {
   summary?: string;
   deprecated?: string;
   versionLabel?: string;
+  apiName?: string;
   breadcrumbs: string[];
   httpRequest?: string;
   optionalQueryParameters: HttpParameterDoc[];
@@ -151,6 +158,7 @@ interface TypePageModel {
   summary?: string;
   deprecated?: string;
   versionLabel?: string;
+  apiName?: string;
   kind: string;
   breadcrumbs: string[];
   baseType?: string;
@@ -166,6 +174,7 @@ interface OverviewPageModel {
   title: string;
   summary?: string;
   versionLabel?: string;
+  apiName?: string;
   serviceName?: string;
   namespaces: NamespaceSummary[];
   operations: OperationSummary[];
@@ -213,21 +222,88 @@ const Handlebars =
     ? (HandlebarsModule.default as typeof HandlebarsModule)
     : HandlebarsModule;
 
-const markdownOverview = compileTemplate<OverviewPageModel>(overviewMarkdownTemplate);
-const markdownOperation = compileTemplate<OperationPageModel>(operationMarkdownTemplate);
-const markdownType = compileTemplate<TypePageModel>(typeMarkdownTemplate);
-const markdownEnum = compileTemplate<TypePageModel>(enumMarkdownTemplate);
-const markdownIndex = compileTemplate<ServiceIndexModel>(serviceIndexMarkdownTemplate);
-const markdownOperationsIndex = compileTemplate<OperationsIndexModel>(operationsIndexMarkdownTemplate);
-const markdownTypesIndex = compileTemplate<TypesIndexModel>(typesIndexMarkdownTemplate);
-
-Handlebars.registerHelper("join", (values: string[], separator: string) => values.join(separator));
-Handlebars.registerHelper("mdCell", (value: unknown) => escapeMarkdownCell(String(value ?? "")));
+Handlebars.registerHelper("join", (values: string[], separator: string) =>
+  values.join(separator),
+);
+Handlebars.registerHelper("mdCell", (value: unknown) =>
+  escapeMarkdownCell(String(value ?? "")),
+);
 
 export async function $onEmit(context: EmitContext<ApiDocsEmitterOptions>) {
   const program = context.program;
   const format: OutputFormat = context.options["format"] ?? "azure-devops";
-  const serviceEntries = getServiceEntries(program, context.options["page-title-prefix"]);
+  const apiName = context.options["api-name"];
+
+  const templateOverrides = resolveTemplateOverrides(
+    context.options["templates"],
+  );
+  let templates;
+  try {
+    templates = loadTemplates(templateOverrides);
+  } catch (err) {
+    const failedEntry = Object.entries(templateOverrides).find(([, path]) => {
+      try {
+        return err instanceof Error && err.message.includes(path);
+      } catch {
+        return false;
+      }
+    });
+    reportDiagnostic(program, {
+      code: "template-load-failed",
+      target: NoTarget,
+      format: {
+        name: failedEntry?.[0] ?? "unknown",
+        path: failedEntry?.[1] ?? "",
+        reason: err instanceof Error ? err.message : String(err),
+      },
+    });
+    return;
+  }
+  const markdownOverview = compileTemplate<OverviewPageModel>(
+    templates.overview,
+  );
+  const markdownOperation = compileTemplate<OperationPageModel>(
+    templates.operation,
+  );
+  const markdownType = compileTemplate<TypePageModel>(templates.type);
+  const markdownEnum = compileTemplate<TypePageModel>(templates.enum);
+  const markdownIndex = compileTemplate<ServiceIndexModel>(
+    templates.serviceIndex,
+  );
+  const markdownOperationsIndex = compileTemplate<OperationsIndexModel>(
+    templates.operationsIndex,
+  );
+  const markdownTypesIndex = compileTemplate<TypesIndexModel>(
+    templates.typesIndex,
+  );
+
+  function renderServiceIndex(model: ServiceIndexModel): string {
+    return prettifyMarkdown(markdownIndex(model));
+  }
+  function renderOverview(model: OverviewPageModel): string {
+    return prettifyMarkdown(markdownOverview(model));
+  }
+  function renderOperation(model: OperationPageModel): string {
+    return prettifyMarkdown(markdownOperation(model));
+  }
+  function renderType(model: TypePageModel): string {
+    const template = model.kind === "Enum" ? markdownEnum : markdownType;
+    return prettifyMarkdown(template(model));
+  }
+  function renderOperationsIndex(model: OperationsIndexModel): string {
+    return prettifyMarkdown(markdownOperationsIndex(model));
+  }
+  function renderTypesIndex(model: TypesIndexModel): string {
+    return prettifyMarkdown(markdownTypesIndex(model));
+  }
+
+  const routePrefix = context.options["route-prefix"] ?? "api/{version}";
+  const serviceEntries = getServiceEntries(
+    program,
+    context.options["page-title-prefix"],
+    apiName,
+    routePrefix,
+  );
 
   if (context.options["render-service-index"] === true) {
     const nonVersionedServices = serviceEntries
@@ -237,31 +313,39 @@ export async function $onEmit(context: EmitContext<ApiDocsEmitterOptions>) {
         summary: service.overview.summary,
         summaryOrFallback: service.overview.summary ?? FALLBACK_SUMMARY,
         // For azure-devops, the overview is at emitterOutputDir/slug.md (next to the slug/ folder).
-        path: format === "azure-devops"
-          ? overviewFileName(service.slug, format)
-          : `${service.slug}/${overviewFileName(service.slug, format)}`,
-      }));
-
-    const versionedServices = [...serviceEntries
-      .filter((service) => service.versionValue !== undefined)
-      .reduce((groups, service) => {
-        const key = service.baseLabel;
-        const current = groups.get(key) ?? [];
-        current.push({
-          title: service.overview.title,
-          summary: service.overview.summary,
-          summaryOrFallback: service.overview.summary ?? FALLBACK_SUMMARY,
-          path: format === "azure-devops"
+        path:
+          format === "azure-devops"
             ? overviewFileName(service.slug, format)
             : `${service.slug}/${overviewFileName(service.slug, format)}`,
-          version: service.versionValue!,
-        });
-        groups.set(key, current);
-        return groups;
-      }, new Map<string, VersionedServiceIndexEntry[]>())]
+      }));
+
+    const versionedServices = [
+      ...serviceEntries
+        .filter((service) => service.versionValue !== undefined)
+        .reduce((groups, service) => {
+          const key = service.baseLabel;
+          const current = groups.get(key) ?? [];
+          current.push({
+            title: service.overview.title,
+            summary: service.overview.summary,
+            summaryOrFallback: service.overview.summary ?? FALLBACK_SUMMARY,
+            path:
+              format === "azure-devops"
+                ? overviewFileName(service.slug, format)
+                : `${service.slug}/${overviewFileName(service.slug, format)}`,
+            version: service.versionValue!,
+          });
+          groups.set(key, current);
+          return groups;
+        }, new Map<string, VersionedServiceIndexEntry[]>()),
+    ]
       .map(([name, versions]) => ({
         name,
-        versions: versions.sort((left, right) => left.version.localeCompare(right.version, undefined, { numeric: true })),
+        versions: versions.sort((left, right) =>
+          left.version.localeCompare(right.version, undefined, {
+            numeric: true,
+          }),
+        ),
       }))
       .sort((left, right) => left.name.localeCompare(right.name));
 
@@ -291,13 +375,18 @@ export async function $onEmit(context: EmitContext<ApiDocsEmitterOptions>) {
 
     // For azure-devops, the overview page is placed next to the slug/ folder so that
     // it acts as the parent page for the folder in the Azure DevOps Wiki sidebar.
-    const overviewPath = format === "azure-devops"
-      ? resolvePath(context.emitterOutputDir, overviewFileName(service.slug, format))
-      : resolvePath(baseDir, overviewFileName(service.slug, format));
+    const overviewPath =
+      format === "azure-devops"
+        ? resolvePath(
+            context.emitterOutputDir,
+            overviewFileName(service.slug, format),
+          )
+        : resolvePath(baseDir, overviewFileName(service.slug, format));
     // Adjust intra-overview links to account for the moved file location.
-    const overviewModel = format === "azure-devops"
-      ? adjustOverviewPathsForAzureDevOps(service.overview, service.slug)
-      : service.overview;
+    const overviewModel =
+      format === "azure-devops"
+        ? adjustOverviewPathsForAzureDevOps(service.overview, service.slug)
+        : service.overview;
     await emitFile(program, {
       path: overviewPath,
       content: renderOverview(overviewModel),
@@ -306,20 +395,24 @@ export async function $onEmit(context: EmitContext<ApiDocsEmitterOptions>) {
     if (format === "azure-devops" || format === "github") {
       if (service.operations.length > 0) {
         // For azure-devops, the operations index is placed next to api/ (not inside it).
-        const opsIndexPath = format === "azure-devops"
-          ? resolvePath(baseDir, "api.md")
-          : resolvePath(baseDir, "api", "README.md");
+        const opsIndexPath =
+          format === "azure-devops"
+            ? resolvePath(baseDir, "api.md")
+            : resolvePath(baseDir, "api", "README.md");
         await emitFile(program, {
           path: opsIndexPath,
-          content: renderOperationsIndex(buildOperationsIndexModel(service, format)),
+          content: renderOperationsIndex(
+            buildOperationsIndexModel(service, format),
+          ),
         });
       }
 
       if (service.types.length > 0) {
         // For azure-devops, the types index is placed next to resources/ (not inside it).
-        const typesIndexPath = format === "azure-devops"
-          ? resolvePath(baseDir, "resources.md")
-          : resolvePath(baseDir, "resources", "README.md");
+        const typesIndexPath =
+          format === "azure-devops"
+            ? resolvePath(baseDir, "resources.md")
+            : resolvePath(baseDir, "resources", "README.md");
         await emitFile(program, {
           path: typesIndexPath,
           content: renderTypesIndex(buildTypesIndexModel(service, format)),
@@ -356,20 +449,28 @@ function compileTemplate<T>(source: string): Handlebars.TemplateDelegate<T> {
 
 function overviewFileName(slug: string, format: OutputFormat): string {
   switch (format) {
-    case "github": return "README.md";
-    case "docfx": return "index.md";
-    default: return `${slug}.md`; // azure-devops
+    case "github":
+      return "README.md";
+    case "docfx":
+      return "index.md";
+    default:
+      return `${slug}.md`; // azure-devops
   }
 }
 
 function rootIndexFileName(format: OutputFormat): string {
   switch (format) {
-    case "docfx": return "index.md";
-    default: return "README.md"; // azure-devops, github
+    case "docfx":
+      return "index.md";
+    default:
+      return "README.md"; // azure-devops, github
   }
 }
 
-function buildOperationsIndexModel(service: ServiceEntry, format: OutputFormat): OperationsIndexModel {
+function buildOperationsIndexModel(
+  service: ServiceEntry,
+  format: OutputFormat,
+): OperationsIndexModel {
   return {
     title: "Operations",
     operations: service.overview.operations.map((op) => ({
@@ -384,7 +485,10 @@ function buildOperationsIndexModel(service: ServiceEntry, format: OutputFormat):
   };
 }
 
-function buildTypesIndexModel(service: ServiceEntry, format: OutputFormat): TypesIndexModel {
+function buildTypesIndexModel(
+  service: ServiceEntry,
+  format: OutputFormat,
+): TypesIndexModel {
   return {
     title: "Types",
     types: service.overview.types.map((t) => ({
@@ -393,7 +497,8 @@ function buildTypesIndexModel(service: ServiceEntry, format: OutputFormat): Type
       summaryOrFallback: t.summaryOrFallback,
       // azure-devops: index is next to resources/ so the full path (resources/Name.md) is correct.
       // github: index is inside resources/ so the resources/ prefix must be stripped.
-      path: format === "azure-devops" ? t.path : t.path.replace(/^resources\//, ""),
+      path:
+        format === "azure-devops" ? t.path : t.path.replace(/^resources\//, ""),
     })),
   };
 }
@@ -403,7 +508,10 @@ function buildTypesIndexModel(service: ServiceEntry, format: OutputFormat): Type
  * emitted one level above the service folder (next to it, not inside it). All relative
  * links must be prefixed with the service slug to remain correct.
  */
-function adjustOverviewPathsForAzureDevOps(overview: OverviewPageModel, slug: string): OverviewPageModel {
+function adjustOverviewPathsForAzureDevOps(
+  overview: OverviewPageModel,
+  slug: string,
+): OverviewPageModel {
   return {
     ...overview,
     operations: overview.operations.map((op) => ({
@@ -454,7 +562,9 @@ function buildDocFxServiceTocContent(service: ServiceEntry): string {
   return lines.join("\n") + "\n";
 }
 
-function buildDocFxRootTocContent(services: Array<{ title: string; path: string }>): string {
+function buildDocFxRootTocContent(
+  services: Array<{ title: string; path: string }>,
+): string {
   const lines: string[] = [];
   for (const service of services) {
     lines.push(`- name: ${service.title}`);
@@ -467,40 +577,46 @@ function prettifyMarkdown(content: string): string {
   return CliPrettify.prettify(content);
 }
 
-function renderServiceIndex(model: ServiceIndexModel): string {
-  return prettifyMarkdown(markdownIndex(model));
+function resolveTemplateOverrides(
+  rawOverrides?: TemplateOverrides,
+): TemplateOverrides {
+  if (!rawOverrides) return {};
+  const resolved: TemplateOverrides = {};
+  for (const [key, value] of Object.entries(rawOverrides) as [
+    keyof TemplateOverrides,
+    string,
+  ][]) {
+    if (value) {
+      resolved[key] = resolvePath(process.cwd(), value);
+    }
+  }
+  return resolved;
 }
 
-function renderOverview(model: OverviewPageModel): string {
-  return prettifyMarkdown(markdownOverview(model));
-}
-
-function renderOperation(model: OperationPageModel): string {
-  return prettifyMarkdown(markdownOperation(model));
-}
-
-function renderType(model: TypePageModel): string {
-  const template = model.kind === "Enum" ? markdownEnum : markdownType;
-  return prettifyMarkdown(template(model));
-}
-
-function renderOperationsIndex(model: OperationsIndexModel): string {
-  return prettifyMarkdown(markdownOperationsIndex(model));
-}
-
-function renderTypesIndex(model: TypesIndexModel): string {
-  return prettifyMarkdown(markdownTypesIndex(model));
-}
-
-function getServiceEntries(program: Program, pageTitlePrefix?: string): ServiceEntry[] {
+function getServiceEntries(
+  program: Program,
+  pageTitlePrefix?: string,
+  apiName?: string,
+  routePrefix?: string,
+): ServiceEntry[] {
   const services = listServices(program);
   const serviceTargets =
     services.length > 0
-      ? services.map((service) => ({ namespace: service.type, title: service.title }))
+      ? services.map((service) => ({
+          namespace: service.type,
+          title: service.title,
+        }))
       : [{ namespace: program.getGlobalNamespaceType(), title: undefined }];
 
   return serviceTargets.flatMap(({ namespace, title }) =>
-    collectServiceEntriesForNamespace(program, namespace, title, pageTitlePrefix),
+    collectServiceEntriesForNamespace(
+      program,
+      namespace,
+      title,
+      pageTitlePrefix,
+      apiName,
+      routePrefix,
+    ),
   );
 }
 
@@ -518,23 +634,41 @@ function collectServiceEntriesForNamespace(
   serviceNamespace: Namespace,
   serviceTitle: string | undefined,
   pageTitlePrefix: string | undefined,
+  apiName?: string,
+  routePrefix?: string,
 ): ServiceEntry[] {
   const versioning = getVersioningMutators(program, serviceNamespace);
 
   if (versioning?.kind === "versioned") {
     return versioning.snapshots.map((snapshot) => {
-      const { type } = unsafe_mutateSubgraphWithNamespace(program, [snapshot.mutator], serviceNamespace);
+      const { type } = unsafe_mutateSubgraphWithNamespace(
+        program,
+        [snapshot.mutator],
+        serviceNamespace,
+      );
       return collectServiceEntry(
         program,
         type as Namespace,
         serviceTitle,
         pageTitlePrefix,
+        apiName,
         snapshot.version,
+        routePrefix,
       );
     });
   }
 
-  return [collectServiceEntry(program, serviceNamespace, serviceTitle, pageTitlePrefix)];
+  return [
+    collectServiceEntry(
+      program,
+      serviceNamespace,
+      serviceTitle,
+      pageTitlePrefix,
+      apiName,
+      undefined,
+      routePrefix,
+    ),
+  ];
 }
 
 function collectServiceEntry(
@@ -542,35 +676,88 @@ function collectServiceEntry(
   serviceNamespace: Namespace,
   serviceTitle: string | undefined,
   pageTitlePrefix: string | undefined,
+  apiName?: string,
   version?: Version,
+  routePrefix?: string,
 ): ServiceEntry {
   const namespaces = collectNamespaces(serviceNamespace);
   const operations = collectOperations(program, serviceNamespace);
   const types = collectTypes(program, serviceNamespace);
-  const baseServiceLabel = describeNamespace(program, serviceNamespace, serviceTitle ?? pageTitlePrefix ?? "API Reference");
-  const serviceLabel = version ? `${baseServiceLabel} ${version.value}` : baseServiceLabel;
-  const serviceSlug = version ? slugify(version.value) : slugify(serviceLabel);
+  const baseServiceLabel = describeNamespace(
+    program,
+    serviceNamespace,
+    serviceTitle ?? pageTitlePrefix ?? "API Reference",
+  );
+  const serviceLabel = version
+    ? `${baseServiceLabel} ${version.value}`
+    : baseServiceLabel;
+
+  // When api-name is set it drives the slug; otherwise fall back to the existing behaviour.
+  const resolvedApiName = apiName
+    ? version
+      ? `${apiName} ${version.value}`
+      : apiName
+    : undefined;
+  const serviceSlug = resolvedApiName
+    ? slugify(resolvedApiName)
+    : version
+      ? slugify(version.value)
+      : slugify(serviceLabel);
 
   // Pre-compute slugs and path maps so type references can be linked across all pages.
-  const sortedOperations = operations.slice().sort((a, b) => a.name.localeCompare(b.name));
-  const sortedTypes = types.slice().sort((a, b) => a.name.localeCompare(b.name));
+  const sortedOperations = operations
+    .slice()
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const sortedTypes = types
+    .slice()
+    .sort((a, b) => a.name.localeCompare(b.name));
   const operationPathById = new Map(
-    sortedOperations.map((op) => [op.id, `api/${operationFileName(op.operation)}.md`]),
+    sortedOperations.map((op) => [
+      op.id,
+      `api/${operationFileName(op.operation)}.md`,
+    ]),
   );
   const typePathById = new Map(
-    sortedTypes.map((t) => [t.id, `resources/${toTitleCaseFileName(t.name)}.md`]),
+    sortedTypes.map((t) => [
+      t.id,
+      `resources/${toTitleCaseFileName(t.name)}.md`,
+    ]),
   );
 
-  const relatedMethodsByTypeId = buildRelatedMethodsByType(program, sortedTypes, sortedOperations, operationPathById, typePathById);
+  const relatedMethodsByTypeId = buildRelatedMethodsByType(
+    program,
+    sortedTypes,
+    sortedOperations,
+    operationPathById,
+    typePathById,
+  );
+
+  const resolvedRoutePrefix = routePrefix
+    ? resolveRoutePrefix(routePrefix, version?.value)
+    : undefined;
 
   const operationPages = sortedOperations.map((operation) => ({
     slug: operationFileName(operation.operation),
-    page: buildOperationPage(program, operation.operation, typePathById, version?.value),
+    page: buildOperationPage(
+      program,
+      operation.operation,
+      typePathById,
+      version?.value,
+      resolvedApiName,
+      resolvedRoutePrefix,
+    ),
   }));
 
   const typePages = sortedTypes.map((typeEntry) => ({
     slug: toTitleCaseFileName(typeEntry.name),
-    page: buildTypePage(program, typeEntry.type, relatedMethodsByTypeId.get(typeEntry.id) ?? [], typePathById, version?.value),
+    page: buildTypePage(
+      program,
+      typeEntry.type,
+      relatedMethodsByTypeId.get(typeEntry.id) ?? [],
+      typePathById,
+      version?.value,
+      resolvedApiName,
+    ),
   }));
 
   // For the overview page (at the service root), stored paths like `resources/Widget.md` are correct as-is.
@@ -578,8 +765,11 @@ function collectServiceEntry(
 
   const overview: OverviewPageModel = {
     title: serviceLabel,
-    summary: getSummary(program, serviceNamespace) ?? getDoc(program, serviceNamespace),
+    summary:
+      getSummary(program, serviceNamespace) ??
+      getDoc(program, serviceNamespace),
     versionLabel: version?.value,
+    apiName: resolvedApiName,
     serviceName: undefined,
     namespaces: namespaces.map((ns) => ({
       name: namespaceName(program, ns),
@@ -593,7 +783,9 @@ function collectServiceEntry(
       title: entry.name,
       containerLabel: entry.containerLabel,
       returnType: overviewTypeRef(entry.operation.returnType),
-      summary: getSummary(program, entry.operation) ?? getDoc(program, entry.operation),
+      summary:
+        getSummary(program, entry.operation) ??
+        getDoc(program, entry.operation),
       summaryOrFallback: describeSummary(program, entry.operation),
       path: operationPathById.get(entry.id) ?? "#",
     })),
@@ -609,7 +801,7 @@ function collectServiceEntry(
 
   return {
     slug: serviceSlug,
-    baseLabel: baseServiceLabel,
+    baseLabel: apiName ?? baseServiceLabel,
     versionValue: version?.value,
     overview,
     operations: operationPages,
@@ -628,8 +820,21 @@ function collectNamespaces(serviceNamespace: Namespace): Namespace[] {
   return namespaces;
 }
 
-function collectOperations(program: Program, namespace: Namespace): Array<{ id: string; name: string; containerLabel: string; operation: Operation }> {
-  const operations: Array<{ id: string; name: string; containerLabel: string; operation: Operation }> = [];
+function collectOperations(
+  program: Program,
+  namespace: Namespace,
+): Array<{
+  id: string;
+  name: string;
+  containerLabel: string;
+  operation: Operation;
+}> {
+  const operations: Array<{
+    id: string;
+    name: string;
+    containerLabel: string;
+    operation: Operation;
+  }> = [];
 
   for (const operation of namespace.operations.values()) {
     if (shouldSkipType(operation)) {
@@ -655,8 +860,21 @@ function collectOperations(program: Program, namespace: Namespace): Array<{ id: 
   return dedupeById(operations);
 }
 
-function collectInterfaceOperations(program: Program, iface: Interface): Array<{ id: string; name: string; containerLabel: string; operation: Operation }> {
-  const operations: Array<{ id: string; name: string; containerLabel: string; operation: Operation }> = [];
+function collectInterfaceOperations(
+  program: Program,
+  iface: Interface,
+): Array<{
+  id: string;
+  name: string;
+  containerLabel: string;
+  operation: Operation;
+}> {
+  const operations: Array<{
+    id: string;
+    name: string;
+    containerLabel: string;
+    operation: Operation;
+  }> = [];
 
   for (const operation of iface.operations.values()) {
     if (shouldSkipType(operation)) {
@@ -674,30 +892,53 @@ function collectInterfaceOperations(program: Program, iface: Interface): Array<{
   return operations;
 }
 
-function collectTypes(program: Program, namespace: Namespace): Array<{ id: string; name: string; type: Model | Enum | Union | Scalar }> {
-  const types: Array<{ id: string; name: string; type: Model | Enum | Union | Scalar }> = [];
+function collectTypes(
+  program: Program,
+  namespace: Namespace,
+): Array<{ id: string; name: string; type: Model | Enum | Union | Scalar }> {
+  const types: Array<{
+    id: string;
+    name: string;
+    type: Model | Enum | Union | Scalar;
+  }> = [];
 
   for (const model of namespace.models.values()) {
     if (!shouldSkipType(model) && model.name) {
-      types.push({ id: entityId(program, model), name: model.name, type: model });
+      types.push({
+        id: entityId(program, model),
+        name: model.name,
+        type: model,
+      });
     }
   }
 
   for (const scalar of namespace.scalars.values()) {
     if (!shouldSkipType(scalar) && scalar.name) {
-      types.push({ id: entityId(program, scalar), name: scalar.name, type: scalar });
+      types.push({
+        id: entityId(program, scalar),
+        name: scalar.name,
+        type: scalar,
+      });
     }
   }
 
   for (const enumeration of namespace.enums.values()) {
     if (!shouldSkipType(enumeration) && enumeration.name) {
-      types.push({ id: entityId(program, enumeration), name: enumeration.name, type: enumeration });
+      types.push({
+        id: entityId(program, enumeration),
+        name: enumeration.name,
+        type: enumeration,
+      });
     }
   }
 
   for (const union of namespace.unions.values()) {
     if (!shouldSkipType(union) && union.name) {
-      types.push({ id: entityId(program, union), name: union.name, type: union });
+      types.push({
+        id: entityId(program, union),
+        name: union.name,
+        type: union,
+      });
     }
   }
 
@@ -708,7 +949,9 @@ function collectTypes(program: Program, namespace: Namespace): Array<{ id: strin
   return dedupeById(types);
 }
 
-function shouldSkipType(type: Operation | Model | Scalar | Enum | Union): boolean {
+function shouldSkipType(
+  type: Operation | Model | Scalar | Enum | Union,
+): boolean {
   switch (type.kind) {
     case "Operation":
     case "Model":
@@ -741,6 +984,8 @@ function buildOperationPage(
   operation: Operation,
   typePathById: Map<string, string>,
   versionLabel?: string,
+  apiName?: string,
+  routePrefix?: string,
 ): OperationPageModel {
   const summary = getSummary(program, operation) ?? getDoc(program, operation);
   const httpOperation = resolveHttpOperation(program, operation);
@@ -757,23 +1002,38 @@ function buildOperationPage(
     summary,
     deprecated: getDeprecated(program, operation),
     versionLabel,
+    apiName,
     breadcrumbs: breadcrumbsForOperation(program, operation),
-    httpRequest: httpOperation ? formatHttpRequest(httpOperation) : undefined,
-    optionalQueryParameters: buildQueryParameterDocs(program, httpOperation, makeRef),
+    httpRequest: httpOperation
+      ? formatHttpRequest(httpOperation, routePrefix)
+      : undefined,
+    optionalQueryParameters: buildQueryParameterDocs(
+      program,
+      httpOperation,
+      makeRef,
+    ),
     requestHeaders: buildHeaderDocs(program, httpOperation, makeRef),
     signature: `${operation.name}(${formatParametersSignature(program, operation.parameters)}) => ${typeReference(program, operation.returnType)}`,
     parameters: modelProperties(program, operation.parameters, makeRef),
     requestBody: buildRequestBodyDoc(program, httpOperation, makeRef),
-    returnType: buildOperationReturnType(program, operation, httpOperation, makeRef),
+    returnType: buildOperationReturnType(
+      program,
+      operation,
+      httpOperation,
+      makeRef,
+    ),
     responses: buildResponseDocs(program, operation, httpOperation, makeRef),
     responseHeaders: buildResponseHeaderDocs(program, httpOperation, makeRef),
     returnsDoc: getReturnsDoc(program, operation),
     errorsDoc: undefined,
-    examples: operationExamples(program, operation, httpOperation),
+    examples: operationExamples(program, operation, httpOperation, routePrefix),
   };
 }
 
-function resolveHttpOperation(program: Program, operation: Operation): HttpOperation | undefined {
+function resolveHttpOperation(
+  program: Program,
+  operation: Operation,
+): HttpOperation | undefined {
   try {
     const [httpOperation, diagnostics] = getHttpOperation(program, operation);
     return diagnostics.length === 0 ? httpOperation : undefined;
@@ -782,8 +1042,29 @@ function resolveHttpOperation(program: Program, operation: Operation): HttpOpera
   }
 }
 
-function formatHttpRequest(httpOperation: HttpOperation): string {
-  return `${httpOperation.verb.toUpperCase()} ${httpOperation.uriTemplate}`;
+function applyRoutePrefix(uriTemplate: string, resolvedPrefix: string): string {
+  if (!resolvedPrefix) return uriTemplate;
+  const cleanPrefix = resolvedPrefix.replace(/^\//, "").replace(/\/$/, "");
+  if (!cleanPrefix) return uriTemplate;
+  const pathPart = uriTemplate.startsWith("/")
+    ? uriTemplate
+    : `/${uriTemplate}`;
+  return `/${cleanPrefix}${pathPart}`;
+}
+
+function resolveRoutePrefix(routePrefix: string, version?: string): string {
+  const substituted = routePrefix.replace(/\{version\}/g, version ?? "");
+  return substituted.replace(/\/+/g, "/").replace(/\/$/, "");
+}
+
+function formatHttpRequest(
+  httpOperation: HttpOperation,
+  routePrefix?: string,
+): string {
+  const path = routePrefix
+    ? applyRoutePrefix(httpOperation.uriTemplate, routePrefix)
+    : httpOperation.uriTemplate;
+  return `${httpOperation.verb.toUpperCase()} ${path}`;
 }
 
 function buildRequestBodyDoc(
@@ -796,13 +1077,27 @@ function buildRequestBodyDoc(
     return undefined;
   }
 
-  const visibility = resolveRequestVisibility(program, httpOperation!.operation, httpOperation!.verb);
+  const visibility = resolveRequestVisibility(
+    program,
+    httpOperation!.operation,
+    httpOperation!.verb,
+  );
   const typeName = makeRef(body.type);
   return {
     type: typeName,
-    contentTypes: body.contentTypes.length > 0 ? [...body.contentTypes] : ["application/json"],
+    contentTypes:
+      body.contentTypes.length > 0
+        ? [...body.contentTypes]
+        : ["application/json"],
     description: `Supply a request body of type ${typeName}.`,
-    jsonExample: body.bodyKind === "single" ? JSON.stringify(jsonValueForType(program, body.type, new Set<Type>(), visibility), null, 2) : undefined,
+    jsonExample:
+      body.bodyKind === "single"
+        ? JSON.stringify(
+            jsonValueForType(program, body.type, new Set<Type>(), visibility),
+            null,
+            2,
+          )
+        : undefined,
   };
 }
 
@@ -821,7 +1116,9 @@ function buildQueryParameterDocs(
       name: parameter.param.name,
       type: makeRef(parameter.param.type),
       requiredLabel: parameter.param.optional ? "No" : "Yes",
-      summary: getSummary(program, parameter.param) ?? getDoc(program, parameter.param),
+      summary:
+        getSummary(program, parameter.param) ??
+        getDoc(program, parameter.param),
       summaryOrFallback: describeSummary(program, parameter.param),
     }));
 }
@@ -841,7 +1138,9 @@ function buildHeaderDocs(
       name: parameter.name,
       type: makeRef(parameter.param.type),
       requiredLabel: parameter.param.optional ? "No" : "Yes",
-      summary: getSummary(program, parameter.param) ?? getDoc(program, parameter.param),
+      summary:
+        getSummary(program, parameter.param) ??
+        getDoc(program, parameter.param),
       summaryOrFallback: describeSummary(program, parameter.param),
     }));
 }
@@ -850,7 +1149,10 @@ function buildHeaderDocs(
  * Extracts the rendered body type(s) from an HTTP operation response.
  * Returns a " | "-joined string of body type refs, or "void" if there is no body.
  */
-function httpResponseBodyType(response: HttpOperationResponse, makeRef: (type: Type) => string): string {
+function httpResponseBodyType(
+  response: HttpOperationResponse,
+  makeRef: (type: Type) => string,
+): string {
   const bodyTypes = response.responses
     .filter((content) => content.body)
     .map((content) => makeRef(content.body!.type));
@@ -884,7 +1186,9 @@ function buildOperationReturnType(
     }
   }
 
-  return bodyTypes.length > 0 ? bodyTypes.join(" | ") : makeRef(operation.returnType);
+  return bodyTypes.length > 0
+    ? bodyTypes.join(" | ")
+    : makeRef(operation.returnType);
 }
 
 function buildResponseDocs(
@@ -898,7 +1202,9 @@ function buildResponseDocs(
       {
         statusCode: "default",
         type: makeRef(operation.returnType),
-        description: getReturnsDoc(program, operation) ?? `Returns ${makeRef(operation.returnType)}.`,
+        description:
+          getReturnsDoc(program, operation) ??
+          `Returns ${makeRef(operation.returnType)}.`,
       },
     ];
   }
@@ -906,7 +1212,11 @@ function buildResponseDocs(
   return httpOperation.responses.map((response) => ({
     statusCode: formatStatusCode(response.statusCodes),
     type: httpResponseBodyType(response, makeRef),
-    description: response.description ?? getSummary(program, response.type) ?? getDoc(program, response.type) ?? FALLBACK_SUMMARY,
+    description:
+      response.description ??
+      getSummary(program, response.type) ??
+      getDoc(program, response.type) ??
+      FALLBACK_SUMMARY,
   }));
 }
 
@@ -953,11 +1263,14 @@ function buildTypePage(
   methods: OperationSummary[],
   typePathById: Map<string, string>,
   versionLabel?: string,
+  apiName?: string,
 ): TypePageModel {
   const summary = getSummary(program, type) ?? getDoc(program, type);
 
   // Type pages live at resources/<slug>.md; links to other types are in the same folder.
-  const makeRef = makeLinkedTypeRef(program, typePathById, (p) => p.replace(/^resources\//, ""));
+  const makeRef = makeLinkedTypeRef(program, typePathById, (p) =>
+    p.replace(/^resources\//, ""),
+  );
 
   if (type.kind === "Model") {
     return {
@@ -965,15 +1278,22 @@ function buildTypePage(
       summary,
       deprecated: getDeprecated(program, type),
       versionLabel,
+      apiName,
       kind: type.kind,
       breadcrumbs: breadcrumbsForType(program, type),
-      baseType: type.baseModel ? makeRef(type.baseModel) : modelBaseType(program, type),
+      baseType: type.baseModel
+        ? makeRef(type.baseModel)
+        : modelBaseType(program, type),
       properties: modelProperties(program, type, makeRef),
       methods,
       variants: [],
       members: [],
       examples: typedExamples(program, type, getExamples(program, type)),
-      jsonRepresentation: JSON.stringify(jsonRepresentationForType(program, type), null, 2),
+      jsonRepresentation: JSON.stringify(
+        jsonRepresentationForType(program, type),
+        null,
+        2,
+      ),
     };
   }
 
@@ -983,15 +1303,22 @@ function buildTypePage(
       summary,
       deprecated: getDeprecated(program, type),
       versionLabel,
+      apiName,
       kind: type.kind,
       breadcrumbs: breadcrumbsForType(program, type),
       baseType: undefined,
       properties: [],
       methods,
-      variants: [...type.variants.values()].map((variant) => unionVariant(program, variant, makeRef)),
+      variants: [...type.variants.values()].map((variant) =>
+        unionVariant(program, variant, makeRef),
+      ),
       members: [],
       examples: typedExamples(program, type, getExamples(program, type)),
-      jsonRepresentation: JSON.stringify(jsonRepresentationForType(program, type), null, 2),
+      jsonRepresentation: JSON.stringify(
+        jsonRepresentationForType(program, type),
+        null,
+        2,
+      ),
     };
   }
 
@@ -1001,13 +1328,16 @@ function buildTypePage(
       summary,
       deprecated: getDeprecated(program, type),
       versionLabel,
+      apiName,
       kind: type.kind,
       breadcrumbs: breadcrumbsForType(program, type),
       baseType: undefined,
       properties: [],
       methods,
       variants: [],
-      members: [...type.members.values()].map((member) => enumMember(program, member)),
+      members: [...type.members.values()].map((member) =>
+        enumMember(program, member),
+      ),
       examples: typedExamples(program, type, getExamples(program, type)),
       jsonRepresentation: "",
     };
@@ -1018,6 +1348,7 @@ function buildTypePage(
     summary,
     deprecated: getDeprecated(program, type),
     versionLabel,
+    apiName,
     kind: type.kind,
     breadcrumbs: breadcrumbsForType(program, type),
     baseType: type.baseScalar ? makeRef(type.baseScalar) : undefined,
@@ -1026,7 +1357,11 @@ function buildTypePage(
     variants: [],
     members: [],
     examples: typedExamples(program, type, getExamples(program, type)),
-    jsonRepresentation: JSON.stringify(jsonRepresentationForType(program, type), null, 2),
+    jsonRepresentation: JSON.stringify(
+      jsonRepresentationForType(program, type),
+      null,
+      2,
+    ),
   };
 }
 
@@ -1046,25 +1381,40 @@ function modelProperties(
 
 function buildRelatedMethodsByType(
   program: Program,
-  types: Array<{ id: string; name: string; type: Model | Enum | Union | Scalar }>,
-  operations: Array<{ id: string; name: string; containerLabel: string; operation: Operation }>,
+  types: Array<{
+    id: string;
+    name: string;
+    type: Model | Enum | Union | Scalar;
+  }>,
+  operations: Array<{
+    id: string;
+    name: string;
+    containerLabel: string;
+    operation: Operation;
+  }>,
   operationPathById: Map<string, string>,
   typePathById: Map<string, string>,
 ): Map<string, OperationSummary[]> {
   const relatedMethods = new Map<string, OperationSummary[]>();
 
   // Type pages live at resources/<slug>.md; links to other types are in the same folder.
-  const makeRef = makeLinkedTypeRef(program, typePathById, (p) => p.replace(/^resources\//, ""));
+  const makeRef = makeLinkedTypeRef(program, typePathById, (p) =>
+    p.replace(/^resources\//, ""),
+  );
 
   for (const typeEntry of types) {
     const methods = operations
-      .filter((operationEntry) => operationUsesType(operationEntry.operation, typeEntry.type))
+      .filter((operationEntry) =>
+        operationUsesType(operationEntry.operation, typeEntry.type),
+      )
       .map((operationEntry) => ({
         name: operationEntry.name,
         title: operationEntry.name,
         containerLabel: operationEntry.containerLabel,
         returnType: makeRef(operationEntry.operation.returnType),
-        summary: getSummary(program, operationEntry.operation) ?? getDoc(program, operationEntry.operation),
+        summary:
+          getSummary(program, operationEntry.operation) ??
+          getDoc(program, operationEntry.operation),
         summaryOrFallback: describeSummary(program, operationEntry.operation),
         path: operationPathById.has(operationEntry.id)
           ? `../${operationPathById.get(operationEntry.id)}`
@@ -1077,11 +1427,21 @@ function buildRelatedMethodsByType(
   return relatedMethods;
 }
 
-function operationUsesType(operation: Operation, target: Model | Enum | Union | Scalar): boolean {
-  return typeContainsTarget(operation.returnType, target, new Set<Type>()) || typeContainsTarget(operation.parameters, target, new Set<Type>());
+function operationUsesType(
+  operation: Operation,
+  target: Model | Enum | Union | Scalar,
+): boolean {
+  return (
+    typeContainsTarget(operation.returnType, target, new Set<Type>()) ||
+    typeContainsTarget(operation.parameters, target, new Set<Type>())
+  );
 }
 
-function typeContainsTarget(type: Type, target: Model | Enum | Union | Scalar, visited: Set<Type>): boolean {
+function typeContainsTarget(
+  type: Type,
+  target: Model | Enum | Union | Scalar,
+  visited: Set<Type>,
+): boolean {
   if (visited.has(type)) {
     return false;
   }
@@ -1094,11 +1454,17 @@ function typeContainsTarget(type: Type, target: Model | Enum | Union | Scalar, v
 
   switch (type.kind) {
     case "Model":
-      return [...type.properties.values()].some((property) => typeContainsTarget(property.type, target, visited));
+      return [...type.properties.values()].some((property) =>
+        typeContainsTarget(property.type, target, visited),
+      );
     case "Union":
-      return [...type.variants.values()].some((variant) => typeContainsTarget(variant.type, target, visited));
+      return [...type.variants.values()].some((variant) =>
+        typeContainsTarget(variant.type, target, visited),
+      );
     case "Tuple":
-      return type.values.some((value) => typeContainsTarget(value, target, visited));
+      return type.values.some((value) =>
+        typeContainsTarget(value, target, visited),
+      );
     default:
       return false;
   }
@@ -1108,7 +1474,12 @@ function sameType(left: Type, right: Model | Enum | Union | Scalar): boolean {
   return left === right;
 }
 
-function jsonRepresentationForType(program: Program, type: Model | Enum | Union | Scalar, visited = new Set<Type>(), visibilityFilter?: Visibility): unknown {
+function jsonRepresentationForType(
+  program: Program,
+  type: Model | Enum | Union | Scalar,
+  visited = new Set<Type>(),
+  visibilityFilter?: Visibility,
+): unknown {
   if (visited.has(type)) {
     return typeReference(program, type);
   }
@@ -1120,10 +1491,18 @@ function jsonRepresentationForType(program: Program, type: Model | Enum | Union 
       const jsonObject: Record<string, unknown> = {};
       for (const property of walkPropertiesInherited(type)) {
         // Skip properties that are not writable for the current request visibility
-        if (visibilityFilter !== undefined && !isVisible(program, property, visibilityFilter)) {
+        if (
+          visibilityFilter !== undefined &&
+          !isVisible(program, property, visibilityFilter)
+        ) {
           continue;
         }
-        jsonObject[property.name] = jsonValueForType(program, property.type, visited, visibilityFilter);
+        jsonObject[property.name] = jsonValueForType(
+          program,
+          property.type,
+          visited,
+          visibilityFilter,
+        );
       }
       return jsonObject;
     }
@@ -1133,14 +1512,26 @@ function jsonRepresentationForType(program: Program, type: Model | Enum | Union 
     }
     case "Union": {
       const firstVariant = [...type.variants.values()][0];
-      return firstVariant ? jsonValueForType(program, firstVariant.type, visited, visibilityFilter) : type.name ?? "union";
+      return firstVariant
+        ? jsonValueForType(
+            program,
+            firstVariant.type,
+            visited,
+            visibilityFilter,
+          )
+        : (type.name ?? "union");
     }
     case "Scalar":
       return scalarPlaceholder(type);
   }
 }
 
-function jsonValueForType(program: Program, type: Type, visited: Set<Type>, visibilityFilter?: Visibility): unknown {
+function jsonValueForType(
+  program: Program,
+  type: Type,
+  visited: Set<Type>,
+  visibilityFilter?: Visibility,
+): unknown {
   switch (type.kind) {
     case "String":
       return type.value;
@@ -1149,24 +1540,52 @@ function jsonValueForType(program: Program, type: Type, visited: Set<Type>, visi
     case "Boolean":
       return type.value;
     case "Tuple":
-      return type.values.map((value) => jsonValueForType(program, value, visited, visibilityFilter));
+      return type.values.map((value) =>
+        jsonValueForType(program, value, visited, visibilityFilter),
+      );
     case "Model":
       if (isArrayModelType(program, type)) {
-        const itemType = type.indexer?.value ?? [...type.properties.values()][0]?.type;
-        return [itemType ? jsonValueForType(program, itemType, visited, visibilityFilter) : "unknown"];
+        const itemType =
+          type.indexer?.value ?? [...type.properties.values()][0]?.type;
+        return [
+          itemType
+            ? jsonValueForType(program, itemType, visited, visibilityFilter)
+            : "unknown",
+        ];
       }
       if (isRecordModelType(program, type)) {
         const valueType = type.indexer?.value;
-        return { property: valueType ? jsonValueForType(program, valueType, visited, visibilityFilter) : "unknown" };
+        return {
+          property: valueType
+            ? jsonValueForType(program, valueType, visited, visibilityFilter)
+            : "unknown",
+        };
       }
-      return jsonRepresentationForType(program, type, new Set(visited), visibilityFilter);
+      return jsonRepresentationForType(
+        program,
+        type,
+        new Set(visited),
+        visibilityFilter,
+      );
     case "Union": {
       const firstVariant = [...type.variants.values()][0];
-      return firstVariant ? jsonValueForType(program, firstVariant.type, visited, visibilityFilter) : type.name ?? "union";
+      return firstVariant
+        ? jsonValueForType(
+            program,
+            firstVariant.type,
+            visited,
+            visibilityFilter,
+          )
+        : (type.name ?? "union");
     }
     case "Enum":
     case "Scalar":
-      return jsonRepresentationForType(program, type, new Set(visited), visibilityFilter);
+      return jsonRepresentationForType(
+        program,
+        type,
+        new Set(visited),
+        visibilityFilter,
+      );
     default:
       return typeReference(program, type);
   }
@@ -1181,7 +1600,12 @@ function scalarPlaceholder(type: Scalar): unknown {
     return true;
   }
 
-  if (type.name.startsWith("int") || type.name.startsWith("uint") || type.name.startsWith("float") || type.name.startsWith("numeric")) {
+  if (
+    type.name.startsWith("int") ||
+    type.name.startsWith("uint") ||
+    type.name.startsWith("float") ||
+    type.name.startsWith("numeric")
+  ) {
     return 0;
   }
 
@@ -1194,7 +1618,10 @@ function unionVariant(
   makeRef: (type: Type) => string,
 ): VariantDoc {
   return {
-    name: typeof variant.name === "symbol" ? variant.name.description ?? "variant" : variant.name,
+    name:
+      typeof variant.name === "symbol"
+        ? (variant.name.description ?? "variant")
+        : variant.name,
     type: makeRef(variant.type),
     summary: getSummary(program, variant) ?? getDoc(program, variant),
     summaryOrFallback: describeSummary(program, variant),
@@ -1210,7 +1637,11 @@ function enumMember(program: Program, member: EnumMember): MemberDoc {
   };
 }
 
-function typedExamples(program: Program, type: Type, examples: readonly Example[]): JsonExampleDoc[] {
+function typedExamples(
+  program: Program,
+  type: Type,
+  examples: readonly Example[],
+): JsonExampleDoc[] {
   return examples.map((example, index) => ({
     title: example.title ?? `Example ${index + 1}`,
     description: example.description,
@@ -1218,14 +1649,33 @@ function typedExamples(program: Program, type: Type, examples: readonly Example[
   }));
 }
 
-function operationExamples(program: Program, operation: Operation, httpOperation: HttpOperation | undefined): OperationExampleDoc[] {
+function operationExamples(
+  program: Program,
+  operation: Operation,
+  httpOperation: HttpOperation | undefined,
+  routePrefix?: string,
+): OperationExampleDoc[] {
   const examples = getOpExamples(program, operation);
 
   if (examples.length > 0) {
-    return examples.map((example, index) => buildOperationExample(program, operation, httpOperation, example, index));
+    return examples.map((example, index) =>
+      buildOperationExample(
+        program,
+        operation,
+        httpOperation,
+        example,
+        index,
+        routePrefix,
+      ),
+    );
   }
 
-  const fallbackExample = buildSyntheticOperationExample(program, operation, httpOperation);
+  const fallbackExample = buildSyntheticOperationExample(
+    program,
+    operation,
+    httpOperation,
+    routePrefix,
+  );
   return fallbackExample ? [fallbackExample] : [];
 }
 
@@ -1235,14 +1685,24 @@ function buildOperationExample(
   httpOperation: HttpOperation | undefined,
   example: OpExample,
   index: number,
+  routePrefix?: string,
 ): OperationExampleDoc {
-  const parameterValues = example.parameters ? serializeSafely(program, example.parameters, operation.parameters) : undefined;
-  const responseValue = example.returnType ? serializeSafely(program, example.returnType, operation.returnType) : undefined;
+  const parameterValues = example.parameters
+    ? serializeSafely(program, example.parameters, operation.parameters)
+    : undefined;
+  const responseValue = example.returnType
+    ? serializeSafely(program, example.returnType, operation.returnType)
+    : undefined;
 
   return {
     title: example.title ?? `Example ${index + 1}`,
     description: example.description,
-    request: buildHttpRequestExample(program, httpOperation, parameterValues),
+    request: buildHttpRequestExample(
+      program,
+      httpOperation,
+      parameterValues,
+      routePrefix,
+    ),
     response: buildHttpResponseExample(program, httpOperation, responseValue),
   };
 }
@@ -1251,6 +1711,7 @@ function buildSyntheticOperationExample(
   program: Program,
   operation: Operation,
   httpOperation: HttpOperation | undefined,
+  routePrefix?: string,
 ): OperationExampleDoc | undefined {
   if (!httpOperation) {
     return undefined;
@@ -1259,26 +1720,60 @@ function buildSyntheticOperationExample(
   return {
     title: "Example 1",
     description: getSummary(program, operation) ?? getDoc(program, operation),
-    request: buildHttpRequestExample(program, httpOperation),
+    request: buildHttpRequestExample(
+      program,
+      httpOperation,
+      undefined,
+      routePrefix,
+    ),
     response: buildHttpResponseExample(program, httpOperation),
   };
 }
 
-function stringifyExample(program: Program, value: Example["value"], type: Type): string {
+function stringifyExample(
+  program: Program,
+  value: Example["value"],
+  type: Type,
+): string {
   return JSON.stringify(serializeSafely(program, value, type), null, 2);
 }
 
-function buildHttpRequestExample(program: Program, httpOperation: HttpOperation | undefined, parameterValues?: unknown): string {
+function buildHttpRequestExample(
+  program: Program,
+  httpOperation: HttpOperation | undefined,
+  parameterValues?: unknown,
+  routePrefix?: string,
+): string {
   if (!httpOperation) {
     return "HTTP metadata is not available for this operation.";
   }
 
-  const visibilityFilter = resolveRequestVisibility(program, httpOperation.operation, httpOperation.verb);
-  const sampleValues = resolveHttpParameterValues(program, httpOperation, parameterValues);
-  const lines = [formatHttpRequestExampleLine(httpOperation, sampleValues)];
-  const headerLines = buildRequestHeaderExampleLines(httpOperation, sampleValues);
+  const visibilityFilter = resolveRequestVisibility(
+    program,
+    httpOperation.operation,
+    httpOperation.verb,
+  );
+  const sampleValues = resolveHttpParameterValues(
+    program,
+    httpOperation,
+    parameterValues,
+  );
+  const lines = [
+    formatHttpRequestExampleLine(httpOperation, sampleValues, routePrefix),
+  ];
+  const headerLines = buildRequestHeaderExampleLines(
+    httpOperation,
+    sampleValues,
+  );
   const body = httpOperation.parameters.body;
-  const bodyValue = body ? extractRequestBodyValue(program, httpOperation, sampleValues, visibilityFilter) : undefined;
+  const bodyValue = body
+    ? extractRequestBodyValue(
+        program,
+        httpOperation,
+        sampleValues,
+        visibilityFilter,
+      )
+    : undefined;
 
   lines.push(...headerLines);
 
@@ -1293,9 +1788,15 @@ function buildHttpRequestExample(program: Program, httpOperation: HttpOperation 
   return lines.join("\n");
 }
 
-function buildHttpResponseExample(program: Program, httpOperation: HttpOperation | undefined, responseValue?: unknown): string | undefined {
+function buildHttpResponseExample(
+  program: Program,
+  httpOperation: HttpOperation | undefined,
+  responseValue?: unknown,
+): string | undefined {
   if (!httpOperation) {
-    return responseValue === undefined ? undefined : JSON.stringify(responseValue, null, 2);
+    return responseValue === undefined
+      ? undefined
+      : JSON.stringify(responseValue, null, 2);
   }
 
   const response = pickPrimaryResponse(httpOperation.responses);
@@ -1304,18 +1805,29 @@ function buildHttpResponseExample(program: Program, httpOperation: HttpOperation
   }
 
   const content = response.responses[0];
-  const inferredValue = responseValue ?? inferResponseBodyValue(program, content);
+  const inferredValue =
+    responseValue ?? inferResponseBodyValue(program, content);
   const lines = [`HTTP/1.1 ${formatStatusCode(response.statusCodes)}`];
 
   if (inferredValue !== undefined) {
-    lines.push(`Content-Type: ${content?.body?.contentTypes[0] ?? "application/json"}`, "", JSON.stringify(inferredValue, null, 2));
+    lines.push(
+      `Content-Type: ${content?.body?.contentTypes[0] ?? "application/json"}`,
+      "",
+      JSON.stringify(inferredValue, null, 2),
+    );
   }
 
   return lines.join("\n");
 }
 
-function formatHttpRequestExampleLine(httpOperation: HttpOperation, parameterValues?: Record<string, unknown>): string {
-  let path = httpOperation.uriTemplate;
+function formatHttpRequestExampleLine(
+  httpOperation: HttpOperation,
+  parameterValues?: Record<string, unknown>,
+  routePrefix?: string,
+): string {
+  let path = routePrefix
+    ? applyRoutePrefix(httpOperation.uriTemplate, routePrefix)
+    : httpOperation.uriTemplate;
   const queryEntries: string[] = [];
 
   for (const parameter of httpOperation.parameters.parameters) {
@@ -1325,14 +1837,22 @@ function formatHttpRequestExampleLine(httpOperation: HttpOperation, parameterVal
     }
 
     if (parameter.type === "path") {
-      path = path.replaceAll(`{${parameter.param.name}}`, encodeURIComponent(String(value)));
-      path = path.replaceAll(`{+${parameter.param.name}}`, encodeURIComponent(String(value)));
+      path = path.replaceAll(
+        `{${parameter.param.name}}`,
+        encodeURIComponent(String(value)),
+      );
+      path = path.replaceAll(
+        `{+${parameter.param.name}}`,
+        encodeURIComponent(String(value)),
+      );
       continue;
     }
 
     if (parameter.type === "query") {
       const queryName = parameter.param.name;
-      queryEntries.push(`${encodeURIComponent(queryName)}=${encodeURIComponent(String(value))}`);
+      queryEntries.push(
+        `${encodeURIComponent(queryName)}=${encodeURIComponent(String(value))}`,
+      );
     }
   }
 
@@ -1344,7 +1864,10 @@ function formatHttpRequestExampleLine(httpOperation: HttpOperation, parameterVal
   return `${httpOperation.verb.toUpperCase()} ${path}`;
 }
 
-function buildRequestHeaderExampleLines(httpOperation: HttpOperation, parameterValues: Record<string, unknown>): string[] {
+function buildRequestHeaderExampleLines(
+  httpOperation: HttpOperation,
+  parameterValues: Record<string, unknown>,
+): string[] {
   const headerLines: string[] = [];
 
   for (const parameter of httpOperation.parameters.parameters) {
@@ -1368,14 +1891,19 @@ function resolveHttpParameterValues(
   httpOperation: HttpOperation,
   parameterValues?: unknown,
 ): Record<string, unknown> {
-  const resolvedValues: Record<string, unknown> = { ...(asRecord(parameterValues) ?? {}) };
+  const resolvedValues: Record<string, unknown> = {
+    ...(asRecord(parameterValues) ?? {}),
+  };
 
   for (const parameter of httpOperation.parameters.parameters) {
     if (resolvedValues[parameter.param.name] !== undefined) {
       continue;
     }
 
-    resolvedValues[parameter.param.name] = sampleValueForType(program, parameter.param.type);
+    resolvedValues[parameter.param.name] = sampleValueForType(
+      program,
+      parameter.param.type,
+    );
   }
 
   return resolvedValues;
@@ -1385,7 +1913,12 @@ function sampleValueForType(program: Program, type: Type): unknown {
   return jsonValueForType(program, type, new Set<Type>());
 }
 
-function extractRequestBodyValue(program: Program, httpOperation: HttpOperation, parameterValues?: unknown, visibilityFilter?: Visibility): unknown {
+function extractRequestBodyValue(
+  program: Program,
+  httpOperation: HttpOperation,
+  parameterValues?: unknown,
+  visibilityFilter?: Visibility,
+): unknown {
   const body = httpOperation.parameters.body;
   if (!body) {
     return undefined;
@@ -1396,10 +1929,15 @@ function extractRequestBodyValue(program: Program, httpOperation: HttpOperation,
     return values[body.property.name];
   }
 
-  return body.bodyKind === "single" ? jsonValueForType(program, body.type, new Set<Type>(), visibilityFilter) : undefined;
+  return body.bodyKind === "single"
+    ? jsonValueForType(program, body.type, new Set<Type>(), visibilityFilter)
+    : undefined;
 }
 
-function inferResponseBodyValue(program: Program, responseContent: HttpOperationResponse["responses"][number] | undefined): unknown {
+function inferResponseBodyValue(
+  program: Program,
+  responseContent: HttpOperationResponse["responses"][number] | undefined,
+): unknown {
   if (!responseContent?.body) {
     return undefined;
   }
@@ -1409,11 +1947,18 @@ function inferResponseBodyValue(program: Program, responseContent: HttpOperation
     : undefined;
 }
 
-function pickPrimaryResponse(responses: HttpOperationResponse[]): HttpOperationResponse | undefined {
-  return responses.find((response) => isSuccessStatusCode(response.statusCodes)) ?? responses[0];
+function pickPrimaryResponse(
+  responses: HttpOperationResponse[],
+): HttpOperationResponse | undefined {
+  return (
+    responses.find((response) => isSuccessStatusCode(response.statusCodes)) ??
+    responses[0]
+  );
 }
 
-function isSuccessStatusCode(statusCode: number | "*" | HttpStatusCodeRange): boolean {
+function isSuccessStatusCode(
+  statusCode: number | "*" | HttpStatusCodeRange,
+): boolean {
   if (typeof statusCode === "number") {
     return statusCode >= 200 && statusCode < 300;
   }
@@ -1425,7 +1970,9 @@ function isSuccessStatusCode(statusCode: number | "*" | HttpStatusCodeRange): bo
   return statusCode.start >= 200 && statusCode.end < 300;
 }
 
-function formatStatusCode(statusCode: number | "*" | HttpStatusCodeRange): string {
+function formatStatusCode(
+  statusCode: number | "*" | HttpStatusCodeRange,
+): string {
   if (typeof statusCode === "number") {
     const label = statusText(statusCode);
     return label ? `${statusCode} ${label}` : `${statusCode}`;
@@ -1464,10 +2011,16 @@ function statusText(statusCode: number): string {
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
-  return value !== null && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
 }
 
-function serializeSafely(program: Program, value: Example["value"] | OpExample["parameters"] | undefined, type: Type): unknown {
+function serializeSafely(
+  program: Program,
+  value: Example["value"] | OpExample["parameters"] | undefined,
+  type: Type,
+): unknown {
   if (value === undefined) {
     return undefined;
   }
@@ -1481,7 +2034,10 @@ function serializeSafely(program: Program, value: Example["value"] | OpExample["
 
 function formatParametersSignature(program: Program, model: Model): string {
   return modelProperties(program, model, (type) => typeReference(program, type))
-    .map((property) => `${property.name}${property.requiredLabel === "No" ? "?" : ""}: ${property.type}`)
+    .map(
+      (property) =>
+        `${property.name}${property.requiredLabel === "No" ? "?" : ""}: ${property.type}`,
+    )
     .join(", ");
 }
 
@@ -1497,7 +2053,10 @@ function containerLabel(program: Program, operation: Operation): string {
   return "Service";
 }
 
-function breadcrumbsForOperation(program: Program, operation: Operation): string[] {
+function breadcrumbsForOperation(
+  program: Program,
+  operation: Operation,
+): string[] {
   const crumbs = ["API"];
 
   if (operation.interface) {
@@ -1508,7 +2067,10 @@ function breadcrumbsForOperation(program: Program, operation: Operation): string
   return crumbs;
 }
 
-function breadcrumbsForType(program: Program, type: Model | Enum | Union | Scalar): string[] {
+function breadcrumbsForType(
+  program: Program,
+  type: Model | Enum | Union | Scalar,
+): string[] {
   const crumbs = ["API"];
 
   if (type.kind === "Union" && !type.name) {
@@ -1528,19 +2090,28 @@ function namespaceName(program: Program, namespace: Namespace): string {
   return getNamespaceFullName(namespace) || namespace.name || "Global";
 }
 
-function describeNamespace(program: Program, namespace: Namespace, fallback: string): string {
+function describeNamespace(
+  program: Program,
+  namespace: Namespace,
+  fallback: string,
+): string {
   return fallback;
 }
 
 function entityId(program: Program, entity: Type): string {
   if (entity.kind === "Operation") {
     const interfaceName = entity.interface ? `${entity.interface.name}.` : "";
-    const namespace = entity.namespace && !isGlobalNamespace(program, entity.namespace) ? `${namespaceName(program, entity.namespace)}.` : "";
+    const namespace =
+      entity.namespace && !isGlobalNamespace(program, entity.namespace)
+        ? `${namespaceName(program, entity.namespace)}.`
+        : "";
     return `${namespace}${interfaceName}${entity.name}`;
   }
 
   if (entity.kind === "Union") {
-    return entity.name ? `${entity.namespace ? `${namespaceName(program, entity.namespace)}.` : ""}${entity.name}` : typeReference(program, entity);
+    return entity.name
+      ? `${entity.namespace ? `${namespaceName(program, entity.namespace)}.` : ""}${entity.name}`
+      : typeReference(program, entity);
   }
 
   return getTypeName(entity);
@@ -1575,10 +2146,13 @@ function makeLinkedTypeRef(
           if (path) return `[${type.name}](${pathAdjuster(path)})`;
           return type.name;
         }
-        return [...type.variants.values()].map((variant) => linkedRef(variant.type)).join(" | ");
+        return [...type.variants.values()]
+          .map((variant) => linkedRef(variant.type))
+          .join(" | ");
       case "Model":
         if (isArrayModelType(program, type)) {
-          const valueType = type.indexer?.value ?? [...type.properties.values()][0]?.type;
+          const valueType =
+            type.indexer?.value ?? [...type.properties.values()][0]?.type;
           return `${valueType ? linkedRef(valueType) : "unknown"}[]`;
         }
         if (isRecordModelType(program, type)) {
@@ -1591,7 +2165,10 @@ function makeLinkedTypeRef(
           return type.name;
         }
         return `{ ${[...type.properties.values()]
-          .map((property) => `${property.name}${property.optional ? "?" : ""}: ${linkedRef(property.type)}`)
+          .map(
+            (property) =>
+              `${property.name}${property.optional ? "?" : ""}: ${linkedRef(property.type)}`,
+          )
           .join("; ")} }`;
       case "Enum": {
         const path = typePathById.get(entityId(program, type));
@@ -1624,12 +2201,15 @@ function typeReference(program: Program, type: Type): string {
       if (type.name) {
         return type.name;
       }
-      return [...type.variants.values()].map((variant) => typeReference(program, variant.type)).join(" | ");
+      return [...type.variants.values()]
+        .map((variant) => typeReference(program, variant.type))
+        .join(" | ");
     case "Model":
       // Check structural array/record types before the name to correctly handle
       // anonymous template instantiations (e.g., Array<Widget> from Widget[]).
       if (isArrayModelType(program, type)) {
-        const valueType = type.indexer?.value ?? [...type.properties.values()][0]?.type;
+        const valueType =
+          type.indexer?.value ?? [...type.properties.values()][0]?.type;
         return `${valueType ? typeReference(program, valueType) : "unknown"}[]`;
       }
       if (isRecordModelType(program, type)) {
@@ -1640,7 +2220,10 @@ function typeReference(program: Program, type: Type): string {
         return type.name;
       }
       return `{ ${[...type.properties.values()]
-        .map((property) => `${property.name}${property.optional ? "?" : ""}: ${typeReference(program, property.type)}`)
+        .map(
+          (property) =>
+            `${property.name}${property.optional ? "?" : ""}: ${typeReference(program, property.type)}`,
+        )
         .join("; ")} }`;
     case "Enum":
       return type.name;
@@ -1722,5 +2305,8 @@ function capitalizeWord(word: string): string {
 }
 
 function escapeMarkdownCell(value: string): string {
-  return value.replace(/\|/gu, "\\|").replace(/[\r\n]+/gu, " ").trim();
+  return value
+    .replace(/\|/gu, "\\|")
+    .replace(/[\r\n]+/gu, " ")
+    .trim();
 }

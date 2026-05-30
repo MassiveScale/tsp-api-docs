@@ -1,16 +1,39 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import type { TemplateOverrides } from "./lib.js";
 
 const templateDir = resolveTemplateDir();
 
-export const overviewMarkdownTemplate = loadTemplate("overview.md.hbs");
-export const operationMarkdownTemplate = loadTemplate("operation.md.hbs");
-export const typeMarkdownTemplate = loadTemplate("type.md.hbs");
-export const enumMarkdownTemplate = loadTemplate("enum.md.hbs");
-export const serviceIndexMarkdownTemplate = loadTemplate("service-index.md.hbs");
-export const operationsIndexMarkdownTemplate = loadTemplate("operations-index.md.hbs");
-export const typesIndexMarkdownTemplate = loadTemplate("types-index.md.hbs");
+export interface TemplateBundle {
+  overview: string;
+  operation: string;
+  type: string;
+  enum: string;
+  serviceIndex: string;
+  operationsIndex: string;
+  typesIndex: string;
+}
+
+export function loadTemplates(
+  overrides: TemplateOverrides = {},
+): TemplateBundle {
+  return {
+    overview: loadTemplate("overview.md.hbs", overrides["overview"]),
+    operation: loadTemplate("operation.md.hbs", overrides["operation"]),
+    type: loadTemplate("type.md.hbs", overrides["type"]),
+    enum: loadTemplate("enum.md.hbs", overrides["enum"]),
+    serviceIndex: loadTemplate(
+      "service-index.md.hbs",
+      overrides["service-index"],
+    ),
+    operationsIndex: loadTemplate(
+      "operations-index.md.hbs",
+      overrides["operations-index"],
+    ),
+    typesIndex: loadTemplate("types-index.md.hbs", overrides["types-index"]),
+  };
+}
 
 function resolveTemplateDir(): string {
   const moduleDir = dirname(fileURLToPath(import.meta.url));
@@ -25,9 +48,14 @@ function resolveTemplateDir(): string {
     }
   }
 
-  throw new Error("Could not find templates directory for tsp-api-docs emitter.");
+  throw new Error(
+    "Could not find templates directory for tsp-api-docs emitter.",
+  );
 }
 
-function loadTemplate(name: string): string {
-  return readFileSync(resolve(templateDir, name), "utf8");
+function loadTemplate(filename: string, overridePath?: string): string {
+  if (overridePath) {
+    return readFileSync(overridePath, "utf8");
+  }
+  return readFileSync(resolve(templateDir, filename), "utf8");
 }

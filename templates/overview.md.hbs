@@ -1,33 +1,45 @@
-# {{title}}
+#
+{{title}}
 
 {{#if summary}}
-{{summary}}
+  {{summary}}
 
 {{/if}}
 {{#if versionLabel}}
-Version: `{{versionLabel}}`
+  Version: `{{versionLabel}}`
 
 {{/if}}
 ## Resources
 
 {{#if types.length}}
-| Type                        | Kind            | Summary                      |
-| --------------------------- | --------------- | ---------------------------- |
-{{#each types}}
-| [{{mdCell name}}]({{path}}) | {{mdCell kind}} | {{mdCell summaryOrFallback}} |
-{{/each}}
+  | Type | Kind | Summary | | --------------------------- | --------------- |
+  ---------------------------- |
+  {{#each types}}
+    | [{{mdCell name}}]({{path}}) |
+    {{mdCell kind}}
+    |
+    {{mdCell summaryOrFallback}}
+    |
+  {{/each}}
 {{else}}
-No resource types were found.
+  No resource types were found.
 {{/if}}
 
 ## Methods
 
 {{#if operations.length}}
-| Method                      | Container                 | Returns               | Summary                      |
-| --------------------------- | ------------------------- | --------------------- | ---------------------------- |
-{{#each operations}}
-| [{{mdCell name}}]({{path}}) | {{mdCell containerLabel}} | {{mdCell returnType}} | {{mdCell summaryOrFallback}} |
-{{/each}}
+  | Method | Container | Returns | Summary | | --------------------------- |
+  ------------------------- | --------------------- |
+  ---------------------------- |
+  {{#each operations}}
+    | [{{mdCell name}}]({{path}}) |
+    {{mdCell containerLabel}}
+    |
+    {{mdCell returnType}}
+    |
+    {{mdCell summaryOrFallback}}
+    |
+  {{/each}}
 {{else}}
-No operations were found.
+  No operations were found.
 {{/if}}
