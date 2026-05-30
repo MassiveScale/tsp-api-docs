@@ -1,13 +1,11 @@
 # Types
 
 {{#if types.length}}
-  | Type | Summary | | -------------------------------------- |
-  ------------------------------------------------------ |
-  {{#each types}}
-    | [{{mdCell name}}]({{path}}) |
-    {{mdCell summaryOrFallback}}
-    |
-  {{/each}}
+| Type                                   |  Summary                                                |
+| -------------------------------------- |  ------------------------------------------------------ |
+{{#each types}}
+| [{{mdCell name}}]({{path}})            |  {{mdCell summaryOrFallback}} |
+{{/each}}
 {{else}}
-  No resource types were found.
+No resource types were found.
 {{/if}}
