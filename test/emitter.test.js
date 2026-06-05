@@ -185,11 +185,11 @@ describe("tsp-api-docs emitter", () => {
       assert.ok(!result.outputs["1-1.md"].includes("analyze"));
       assert.ok(result.outputs["2-0.md"].includes("analyze"));
       assert.equal(
-        result.outputs["1-0/resources/Analyze-Result.md"],
+        result.outputs["1-0/resources/AnalyzeResult.md"],
         undefined,
       );
       assert.ok(
-        result.outputs["2-0/resources/Analyze-Result.md"] !== undefined,
+        result.outputs["2-0/resources/AnalyzeResult.md"] !== undefined,
       );
       assert.ok(result.outputs["2-0.md"].includes("Version: `2.0`"));
       assert.ok(
@@ -478,7 +478,7 @@ describe("tsp-api-docs emitter", () => {
     `);
 
     const widgetListPage =
-      result.outputs["relationship-api/resources/Widget-List.md"];
+      result.outputs["relationship-api/resources/WidgetList.md"];
     assert.ok(widgetListPage.includes("## Methods"));
     assert.ok(widgetListPage.includes("| [list](../api/Widgets-List.md) |"));
     assert.ok(widgetListPage.includes("## Properties"));

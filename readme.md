@@ -16,6 +16,7 @@ Supports multiple output formats targeting Azure DevOps Wiki, GitHub, and DocFx.
 - Configurable `route-prefix` with `{version}` token substitution for HTTP request lines (default: `api/{version}`).
 - Response headers documented per operation.
 - Request body examples automatically omit read-only and immutable properties based on HTTP verb visibility.
+- Type names rendered exactly as defined — no CamelCase splitting in page titles.
 
 ## Prerequisites
 

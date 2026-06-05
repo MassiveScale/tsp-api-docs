@@ -720,7 +720,7 @@ function collectServiceEntry(
   const typePathById = new Map(
     sortedTypes.map((t) => [
       t.id,
-      `resources/${toTitleCaseFileName(t.name)}.md`,
+      `resources/${t.name}.md`,
     ]),
   );
 
@@ -749,7 +749,7 @@ function collectServiceEntry(
   }));
 
   const typePages = sortedTypes.map((typeEntry) => ({
-    slug: toTitleCaseFileName(typeEntry.name),
+    slug: typeEntry.name,
     page: buildTypePage(
       program,
       typeEntry.type,
@@ -1274,7 +1274,7 @@ function buildTypePage(
 
   if (type.kind === "Model") {
     return {
-      title: toTitleCaseLabel(type.name),
+      title: type.name,
       summary,
       deprecated: getDeprecated(program, type),
       versionLabel,
@@ -1299,7 +1299,7 @@ function buildTypePage(
 
   if (type.kind === "Union") {
     return {
-      title: toTitleCaseLabel(type.name ?? "union"),
+      title: type.name ?? "union",
       summary,
       deprecated: getDeprecated(program, type),
       versionLabel,
@@ -1324,7 +1324,7 @@ function buildTypePage(
 
   if (type.kind === "Enum") {
     return {
-      title: toTitleCaseLabel(type.name),
+      title: type.name,
       summary,
       deprecated: getDeprecated(program, type),
       versionLabel,
@@ -1344,7 +1344,7 @@ function buildTypePage(
   }
 
   return {
-    title: toTitleCaseLabel(type.name),
+    title: type.name,
     summary,
     deprecated: getDeprecated(program, type),
     versionLabel,
