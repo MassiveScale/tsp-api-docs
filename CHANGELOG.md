@@ -9,9 +9,14 @@ This project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **`clean-output-dir` option** — when `true` (default), the emitter deletes the entire `emitter-output-dir` before writing any files so stale output from previous runs is removed. Set to `false` to preserve existing files.
+
 ### Fixed
 
 - **Type names are exact** — type page titles and file names now use the type name exactly as defined in TypeSpec (e.g. `WidgetList.md`, `AnalyzeResult.md`) instead of splitting CamelCase into hyphenated/spaced forms (`Widget-List.md`, `Analyze Result`).
+- **No-explicit-any lint error** — the JSON schema for the `templates` option now uses a safe double-cast through `unknown` instead of `as any`.
 
 ---
 

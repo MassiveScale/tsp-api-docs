@@ -19,6 +19,7 @@ export type TemplateOverrides = Partial<Record<TemplateName, string>>;
 
 export interface ApiDocsEmitterOptions {
   "emitter-output-dir"?: string;
+  "clean-output-dir"?: boolean;
   "page-title-prefix"?: string;
   "render-service-index"?: boolean;
   format?: OutputFormat;
@@ -27,12 +28,16 @@ export interface ApiDocsEmitterOptions {
   templates?: TemplateOverrides;
 }
 
-const optionsSchema: JSONSchemaType<ApiDocsEmitterOptions> = {
+const optionsSchema = {
   type: "object",
   additionalProperties: false,
   properties: {
     "emitter-output-dir": {
       type: "string",
+      nullable: true,
+    },
+    "clean-output-dir": {
+      type: "boolean",
       nullable: true,
     },
     "page-title-prefix": {
@@ -70,10 +75,10 @@ const optionsSchema: JSONSchemaType<ApiDocsEmitterOptions> = {
         "types-index": { type: "string", nullable: true },
       },
       required: [],
-    } as any,
+    },
   },
   required: [],
-};
+} as unknown as JSONSchemaType<ApiDocsEmitterOptions>;
 
 export const $lib = createTypeSpecLibrary({
   name: "tsp-api-docs",

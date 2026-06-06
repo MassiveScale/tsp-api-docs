@@ -184,13 +184,8 @@ describe("tsp-api-docs emitter", () => {
       assert.ok(result.outputs["1-1.md"].includes("create"));
       assert.ok(!result.outputs["1-1.md"].includes("analyze"));
       assert.ok(result.outputs["2-0.md"].includes("analyze"));
-      assert.equal(
-        result.outputs["1-0/resources/AnalyzeResult.md"],
-        undefined,
-      );
-      assert.ok(
-        result.outputs["2-0/resources/AnalyzeResult.md"] !== undefined,
-      );
+      assert.equal(result.outputs["1-0/resources/AnalyzeResult.md"], undefined);
+      assert.ok(result.outputs["2-0/resources/AnalyzeResult.md"] !== undefined);
       assert.ok(result.outputs["2-0.md"].includes("Version: `2.0`"));
       assert.ok(
         result.outputs["2-0/resources/Widget.md"].includes("Version: `2.0`"),

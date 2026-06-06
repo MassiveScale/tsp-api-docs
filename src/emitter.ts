@@ -22,7 +22,6 @@ import {
   type Example,
   type Interface,
   type Model,
-  type ModelProperty,
   type Namespace,
   type OpExample,
   type Operation,
@@ -44,6 +43,7 @@ import {
   type HttpStatusCodeRange,
 } from "@typespec/http";
 import { getVersioningMutators, type Version } from "@typespec/versioning";
+import { rm } from "node:fs/promises";
 import * as HandlebarsModule from "handlebars";
 import { CliPrettify } from "markdown-table-prettify";
 import type {
@@ -295,6 +295,10 @@ export async function $onEmit(context: EmitContext<ApiDocsEmitterOptions>) {
   }
   function renderTypesIndex(model: TypesIndexModel): string {
     return prettifyMarkdown(markdownTypesIndex(model));
+  }
+
+  if (context.options["clean-output-dir"] ?? true) {
+    await rm(context.emitterOutputDir, { recursive: true, force: true });
   }
 
   const routePrefix = context.options["route-prefix"] ?? "api/{version}";
@@ -718,10 +722,7 @@ function collectServiceEntry(
     ]),
   );
   const typePathById = new Map(
-    sortedTypes.map((t) => [
-      t.id,
-      `resources/${t.name}.md`,
-    ]),
+    sortedTypes.map((t) => [t.id, `resources/${t.name}.md`]),
   );
 
   const relatedMethodsByTypeId = buildRelatedMethodsByType(
