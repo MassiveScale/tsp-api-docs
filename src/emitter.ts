@@ -706,7 +706,9 @@ function resolveErRelationTarget(
       const valueType = type.indexer?.value;
       if (
         valueType &&
-        (valueType.kind === "Model" || valueType.kind === "Enum") &&
+        (valueType.kind === "Model" ||
+          valueType.kind === "Enum" ||
+          valueType.kind === "Union") &&
         "name" in valueType &&
         valueType.name &&
         knownTypeNames.has(valueType.name)
