@@ -44,7 +44,7 @@ import {
 } from "@typespec/http";
 import { getVersioningMutators, type Version } from "@typespec/versioning";
 import { existsSync } from "node:fs";
-import { rm } from "node:fs/promises";
+import { readdir, rm } from "node:fs/promises";
 import * as HandlebarsModule from "handlebars";
 import { CliPrettify } from "markdown-table-prettify";
 import type {
@@ -310,7 +310,7 @@ export async function $onEmit(context: EmitContext<ApiDocsEmitterOptions>) {
     if (outputDir === process.cwd() || outputDir === "/") {
       throw new Error(`Refusing to delete unsafe output directory: ${outputDir}`);
     }
-    await rm(outputDir, { recursive: true, force: true });
+    await cleanDocFiles(outputDir, format);
   }
 
   const routePrefix = context.options["route-prefix"] ?? "api/{version}";
@@ -641,7 +641,7 @@ function buildRelationDiagram(
           knownTypeNames,
         );
         if (relTarget) {
-          const relLabel = serializeValueAsJson(prop.name);
+          const relLabel = JSON.stringify(prop.name);
           const rel = relTarget.isArray
             ? `  ${name} ||--o{ ${relTarget.typeName} : ${relLabel}`
             : `  ${name} }o--|| ${relTarget.typeName} : ${relLabel}`;
@@ -777,6 +777,32 @@ function sanitizeErName(value: string): string {
 
 function prettifyMarkdown(content: string): string {
   return CliPrettify.prettify(content);
+}
+
+function getProjectFileNames(format: OutputFormat): string[] {
+  switch (format) {
+    case "docfx":
+      return ["docfx.json"];
+    default:
+      return [];
+  }
+}
+
+async function cleanDocFiles(outputDir: string, format: OutputFormat): Promise<void> {
+  const projectFiles = new Set(getProjectFileNames(format));
+  if (projectFiles.size === 0) {
+    await rm(outputDir, { recursive: true, force: true });
+    return;
+  }
+  try {
+    const entries = await readdir(outputDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (projectFiles.has(entry.name)) continue;
+      await rm(resolvePath(outputDir, entry.name), { recursive: true, force: true });
+    }
+  } catch {
+    // Directory doesn't exist yet — nothing to clean.
+  }
 }
 
 function resolveTemplateOverrides(

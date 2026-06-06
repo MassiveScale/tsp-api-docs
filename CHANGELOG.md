@@ -16,10 +16,11 @@ This project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **`emit-relation-diagram` option** — when `true`, the emitter writes a `relation-diagram.md` file in each service directory containing a Mermaid `erDiagram` of all emitted types and their relationships. For the `docfx` format the diagram is also linked in the service `toc.yml`.
 - **`overwrite-project-files` option** — when `false` (default), project/configuration files (e.g. `docfx.json`) are only written if they do not already exist on disk. Set to `true` to always overwrite them. Has no effect on formats that do not emit project files.
 - **DocFx `docfx.json` emission** — the DocFx format now automatically emits a `docfx.json` project configuration file at the output root, controlled by `emit-project-files` and `overwrite-project-files`.
-- **`clean-output-dir` option** — when `true` (default), the emitter deletes the entire `emitter-output-dir` before writing any files so stale output from previous runs is removed. Set to `false` to preserve existing files.
+- **`clean-output-dir` option** — when `true` (default), the emitter removes all previously generated documentation files from `emitter-output-dir` before writing new output, preventing stale files from accumulating. Project/configuration files (e.g. `docfx.json`) are always preserved regardless of this setting. Set to `false` to skip cleaning entirely.
 
 ### Fixed
 
+- **`clean-output-dir` preserves project files** — the directory clean now enumerates only non-project-file entries and deletes them individually, so `docfx.json` (and equivalent files for other formats) survive the clean. Previously the entire output directory was wiped, making `overwrite-project-files: false` ineffective on subsequent runs.
 - **Markdown tables render correctly** — all Handlebars templates have been rewritten so that each table row is emitted on a single line. Previously, indented `{{#each}}` blocks caused every cell to appear on its own line, which prevented `CliPrettify` from aligning the columns.
 - **`docfx.json` is now template-driven** — the DocFx project file is rendered from `templates/docfx.json.hbs` (overridable via the `templates["docfx-project"]` option) instead of being hardcoded in TypeScript.
 - **Type names are exact** — type page titles and file names now use the type name exactly as defined in TypeSpec (e.g. `WidgetList.md`, `AnalyzeResult.md`) instead of splitting CamelCase into hyphenated/spaced forms (`Widget-List.md`, `Analyze Result`).
