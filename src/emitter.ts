@@ -306,7 +306,11 @@ export async function $onEmit(context: EmitContext<ApiDocsEmitterOptions>) {
   }
 
   if (context.options["clean-output-dir"] ?? true) {
-    await rm(context.emitterOutputDir, { recursive: true, force: true });
+    const outputDir = resolvePath(process.cwd(), context.emitterOutputDir);
+    if (outputDir === process.cwd() || outputDir === "/") {
+      throw new Error(`Refusing to delete unsafe output directory: ${outputDir}`);
+    }
+    await rm(outputDir, { recursive: true, force: true });
   }
 
   const routePrefix = context.options["route-prefix"] ?? "api/{version}";
