@@ -77,6 +77,7 @@ export function splitIdentifierWords(value: string): string[] {
 
 export function escapeMarkdownCell(value: string): string {
   return value
+    .replace(/\\/gu, "\\\\")
     .replace(/\|/gu, "\\|")
     .replace(/[\r\n]+/gu, " ")
     .trim();
