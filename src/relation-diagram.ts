@@ -2,12 +2,8 @@ import {
   isArrayModelType,
   isRecordModelType,
   walkPropertiesInherited,
-  type Enum,
-  type Model,
   type Program,
-  type Scalar,
   type Type,
-  type Union,
 } from "@typespec/compiler";
 import type { OutputFormat } from "./lib.js";
 import type { ServiceEntry } from "./service-entry.js";

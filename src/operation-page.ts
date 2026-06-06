@@ -14,7 +14,6 @@ import {
   resolveRequestVisibility,
   type HttpOperation,
   type HttpOperationResponse,
-  type HttpStatusCodeRange,
 } from "@typespec/http";
 import type { OperationExampleDoc } from "./operation-examples.js";
 import { operationExamples } from "./operation-examples.js";
