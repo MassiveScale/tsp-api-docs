@@ -913,7 +913,10 @@ describe("tsp-api-docs emitter", () => {
         .compile(relatedSource);
 
       const diagram = result.outputs["pet-api/relation-diagram.md"];
-      assert.ok(diagram.includes("```mermaid"), "should contain a mermaid code block");
+      assert.ok(
+        diagram.includes("```mermaid"),
+        "should contain a mermaid code block",
+      );
       assert.ok(diagram.includes("erDiagram"), "should use erDiagram syntax");
       assert.ok(diagram.includes("Pet"), "should include the Pet entity");
       assert.ok(diagram.includes("Owner"), "should include the Owner entity");

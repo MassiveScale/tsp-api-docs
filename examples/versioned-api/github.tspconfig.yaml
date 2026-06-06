@@ -6,3 +6,4 @@ options:
     emitter-output-dir: "{project-root}/tsp-output/github"
     format: "github"
     render-service-index: true
+    emit-relation-diagram: true
