@@ -43,6 +43,7 @@ import {
   type HttpStatusCodeRange,
 } from "@typespec/http";
 import { getVersioningMutators, type Version } from "@typespec/versioning";
+import { existsSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import * as HandlebarsModule from "handlebars";
 import { CliPrettify } from "markdown-table-prettify";
@@ -233,6 +234,10 @@ export async function $onEmit(context: EmitContext<ApiDocsEmitterOptions>) {
   const program = context.program;
   const format: OutputFormat = context.options["format"] ?? "azure-devops";
   const apiName = context.options["api-name"];
+  const emitProjectFiles = context.options["emit-project-files"] ?? true;
+  const overwriteProjectFiles = context.options["overwrite-project-files"] ?? false;
+  const docfxThemes = context.options["docfx-theme"] ?? ["default"];
+  const emitRelationDiagram = context.options["emit-relation-diagram"] ?? false;
 
   const templateOverrides = resolveTemplateOverrides(
     context.options["templates"],
@@ -275,6 +280,9 @@ export async function $onEmit(context: EmitContext<ApiDocsEmitterOptions>) {
   );
   const markdownTypesIndex = compileTemplate<TypesIndexModel>(
     templates.typesIndex,
+  );
+  const renderDocFxProject = compileTemplate<{ themes: string[] }>(
+    templates.docfxProject,
   );
 
   function renderServiceIndex(model: ServiceIndexModel): string {
@@ -374,6 +382,16 @@ export async function $onEmit(context: EmitContext<ApiDocsEmitterOptions>) {
     }
   }
 
+  if (format === "docfx" && emitProjectFiles) {
+    const docfxJsonPath = resolvePath(context.emitterOutputDir, "docfx.json");
+    if (overwriteProjectFiles || !existsSync(docfxJsonPath)) {
+      await emitFile(program, {
+        path: docfxJsonPath,
+        content: renderDocFxProject({ themes: docfxThemes }),
+      });
+    }
+  }
+
   for (const service of serviceEntries) {
     const baseDir = resolvePath(context.emitterOutputDir, service.slug);
 
@@ -427,7 +445,14 @@ export async function $onEmit(context: EmitContext<ApiDocsEmitterOptions>) {
     if (format === "docfx") {
       await emitFile(program, {
         path: resolvePath(baseDir, "toc.yml"),
-        content: buildDocFxServiceTocContent(service),
+        content: buildDocFxServiceTocContent(service, emitRelationDiagram),
+      });
+    }
+
+    if (emitRelationDiagram) {
+      await emitFile(program, {
+        path: resolvePath(baseDir, "relation-diagram.md"),
+        content: buildRelationDiagram(program, service),
       });
     }
 
@@ -543,10 +568,14 @@ function prefixRelativeMarkdownLinks(text: string, prefix: string): string {
   });
 }
 
-function buildDocFxServiceTocContent(service: ServiceEntry): string {
+function buildDocFxServiceTocContent(service: ServiceEntry, includeRelationDiagram: boolean): string {
   const lines: string[] = [];
   lines.push(`- name: Overview`);
   lines.push(`  href: index.md`);
+  if (includeRelationDiagram) {
+    lines.push(`- name: Relation Diagram`);
+    lines.push(`  href: relation-diagram.md`);
+  }
   if (service.operations.length > 0) {
     lines.push(`- name: API`);
     lines.push(`  items:`);
@@ -575,6 +604,168 @@ function buildDocFxRootTocContent(
     lines.push(`  href: ${service.path}`);
   }
   return lines.join("\n") + "\n";
+}
+
+/**
+ * Generates a Markdown page containing a Mermaid ER diagram that shows all
+ * emitted types and the relationships between them.
+ */
+function buildRelationDiagram(
+  program: Program,
+  service: ServiceEntry,
+): string {
+  const knownTypeNames = new Set(service.rawTypes.map((t) => t.name));
+  const entities: string[] = [];
+  const relationships: string[] = [];
+  const seenRelationships = new Set<string>();
+
+  for (const { name, type } of service.rawTypes) {
+    const attrs: string[] = [];
+
+    if (
+      type.kind === "Model" &&
+      !isArrayModelType(program, type) &&
+      !isRecordModelType(program, type)
+    ) {
+      for (const prop of walkPropertiesInherited(type)) {
+        const attrType = erAttrType(program, prop.type);
+        attrs.push(`    ${attrType} ${sanitizeErName(prop.name)}`);
+
+        const relTarget = resolveErRelationTarget(
+          program,
+          prop.type,
+          knownTypeNames,
+        );
+        if (relTarget) {
+          const rel = relTarget.isArray
+            ? `  ${name} ||--o{ ${relTarget.typeName} : "${prop.name}"`
+            : `  ${name} }o--|| ${relTarget.typeName} : "${prop.name}"`;
+          const key = `${name}|${relTarget.typeName}|${prop.name}`;
+          if (!seenRelationships.has(key)) {
+            seenRelationships.add(key);
+            relationships.push(rel);
+          }
+        }
+      }
+    } else if (type.kind === "Enum") {
+      for (const member of type.members.values()) {
+        attrs.push(`    string ${sanitizeErName(member.name)}`);
+      }
+    } else if (type.kind === "Union") {
+      for (const [variantName] of type.variants) {
+        if (typeof variantName === "string") {
+          attrs.push(`    string ${sanitizeErName(variantName)}`);
+        }
+      }
+    } else if (type.kind === "Scalar") {
+      attrs.push(`    ${sanitizeErName(type.name)} value`);
+    }
+
+    if (attrs.length > 0) {
+      entities.push(`  ${name} {\n${attrs.join("\n")}\n  }`);
+    } else {
+      entities.push(`  ${name}`);
+    }
+  }
+
+  const mermaidLines = ["erDiagram", ...entities];
+  if (relationships.length > 0) {
+    mermaidLines.push(...relationships);
+  }
+
+  return [
+    "# Relation Diagram",
+    "",
+    "```mermaid",
+    mermaidLines.join("\n"),
+    "```",
+    "",
+  ].join("\n");
+}
+
+interface ErRelationTarget {
+  typeName: string;
+  isArray: boolean;
+}
+
+/**
+ * Returns the named entity target of a type reference if it resolves to a
+ * known service type (Model, Enum, or Union), otherwise `undefined`.
+ */
+function resolveErRelationTarget(
+  program: Program,
+  type: Type,
+  knownTypeNames: Set<string>,
+): ErRelationTarget | undefined {
+  if (type.kind === "Model") {
+    if (isArrayModelType(program, type)) {
+      const valueType = type.indexer?.value;
+      if (
+        valueType &&
+        (valueType.kind === "Model" || valueType.kind === "Enum") &&
+        "name" in valueType &&
+        valueType.name &&
+        knownTypeNames.has(valueType.name)
+      ) {
+        return { typeName: valueType.name, isArray: true };
+      }
+      return undefined;
+    }
+    if (type.name && knownTypeNames.has(type.name)) {
+      return { typeName: type.name, isArray: false };
+    }
+  }
+  if (
+    (type.kind === "Enum" || type.kind === "Union") &&
+    type.name &&
+    knownTypeNames.has(type.name)
+  ) {
+    return { typeName: type.name, isArray: false };
+  }
+  return undefined;
+}
+
+/**
+ * Returns a Mermaid-safe attribute type string for the given TypeSpec type.
+ * Array types use the `_array` suffix; complex types fall back to simple labels.
+ */
+function erAttrType(program: Program, type: Type): string {
+  switch (type.kind) {
+    case "Scalar":
+      return sanitizeErName(type.name);
+    case "Model":
+      if (isArrayModelType(program, type)) {
+        const valueType = type.indexer?.value;
+        const elemName = valueType ? erAttrType(program, valueType) : "unknown";
+        return `${elemName}_array`;
+      }
+      if (isRecordModelType(program, type)) return "map";
+      if (type.name) return sanitizeErName(type.name);
+      return "object";
+    case "Enum":
+      return sanitizeErName(type.name);
+    case "Union":
+      if (type.name) return sanitizeErName(type.name);
+      return "union";
+    case "String":
+      return "string";
+    case "Number":
+      return "number";
+    case "Boolean":
+      return "boolean";
+    default:
+      return "unknown";
+  }
+}
+
+/**
+ * Strips characters that are not valid in a Mermaid ER diagram identifier.
+ * Mermaid ER attribute tokens allow `[a-zA-Z_][\\w-~]*`.
+ */
+function sanitizeErName(value: string): string {
+  return value
+    .replace(/[^a-zA-Z0-9_\-~]/g, "_")
+    .replace(/^([0-9])/, "_$1");
 }
 
 function prettifyMarkdown(content: string): string {
@@ -631,6 +822,7 @@ interface ServiceEntry {
   overview: OverviewPageModel;
   operations: Array<{ slug: string; page: OperationPageModel }>;
   types: Array<{ slug: string; page: TypePageModel }>;
+  rawTypes: Array<{ id: string; name: string; type: Model | Enum | Union | Scalar }>;
 }
 
 function collectServiceEntriesForNamespace(
@@ -807,6 +999,7 @@ function collectServiceEntry(
     overview,
     operations: operationPages,
     types: typePages,
+    rawTypes: sortedTypes,
   };
 }
 

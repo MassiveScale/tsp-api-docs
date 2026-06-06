@@ -11,10 +11,17 @@ This project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`docfx-theme` option** — string array of DocFx template names applied to the `build.template` array in the generated `docfx.json`. When not provided, defaults to `["default"]`. Only has effect with `format: docfx`.
+- **`emit-project-files` option** — when `true` (default), the emitter writes project/configuration files such as `docfx.json` for the DocFx format. Set to `false` to emit documentation files only.
+- **`emit-relation-diagram` option** — when `true`, the emitter writes a `relation-diagram.md` file in each service directory containing a Mermaid `erDiagram` of all emitted types and their relationships. For the `docfx` format the diagram is also linked in the service `toc.yml`.
+- **`overwrite-project-files` option** — when `false` (default), project/configuration files (e.g. `docfx.json`) are only written if they do not already exist on disk. Set to `true` to always overwrite them. Has no effect on formats that do not emit project files.
+- **DocFx `docfx.json` emission** — the DocFx format now automatically emits a `docfx.json` project configuration file at the output root, controlled by `emit-project-files` and `overwrite-project-files`.
 - **`clean-output-dir` option** — when `true` (default), the emitter deletes the entire `emitter-output-dir` before writing any files so stale output from previous runs is removed. Set to `false` to preserve existing files.
 
 ### Fixed
 
+- **Markdown tables render correctly** — all Handlebars templates have been rewritten so that each table row is emitted on a single line. Previously, indented `{{#each}}` blocks caused every cell to appear on its own line, which prevented `CliPrettify` from aligning the columns.
+- **`docfx.json` is now template-driven** — the DocFx project file is rendered from `templates/docfx.json.hbs` (overridable via the `templates["docfx-project"]` option) instead of being hardcoded in TypeScript.
 - **Type names are exact** — type page titles and file names now use the type name exactly as defined in TypeSpec (e.g. `WidgetList.md`, `AnalyzeResult.md`) instead of splitting CamelCase into hyphenated/spaced forms (`Widget-List.md`, `Analyze Result`).
 - **No-explicit-any lint error** — the JSON schema for the `templates` option now uses a safe double-cast through `unknown` instead of `as any`.
 

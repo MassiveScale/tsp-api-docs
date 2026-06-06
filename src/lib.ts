@@ -13,17 +13,22 @@ export type TemplateName =
   | "enum"
   | "service-index"
   | "operations-index"
-  | "types-index";
+  | "types-index"
+  | "docfx-project";
 
 export type TemplateOverrides = Partial<Record<TemplateName, string>>;
 
 export interface ApiDocsEmitterOptions {
-  "emitter-output-dir"?: string;
+  "api-name"?: string;
   "clean-output-dir"?: boolean;
+  "docfx-theme"?: string[];
+  "emit-project-files"?: boolean;
+  "emit-relation-diagram"?: boolean;
+  "emitter-output-dir"?: string;
+  format?: OutputFormat;
+  "overwrite-project-files"?: boolean;
   "page-title-prefix"?: string;
   "render-service-index"?: boolean;
-  format?: OutputFormat;
-  "api-name"?: string;
   "route-prefix"?: string;
   templates?: TemplateOverrides;
 }
@@ -32,11 +37,37 @@ const optionsSchema = {
   type: "object",
   additionalProperties: false,
   properties: {
-    "emitter-output-dir": {
+    "api-name": {
       type: "string",
       nullable: true,
     },
     "clean-output-dir": {
+      type: "boolean",
+      nullable: true,
+    },
+    "docfx-theme": {
+      type: "array",
+      items: { type: "string" },
+      nullable: true,
+    },
+    "emit-project-files": {
+      type: "boolean",
+      nullable: true,
+    },
+    "emit-relation-diagram": {
+      type: "boolean",
+      nullable: true,
+    },
+    "emitter-output-dir": {
+      type: "string",
+      nullable: true,
+    },
+    format: {
+      type: "string",
+      enum: ["azure-devops", "github", "docfx"],
+      nullable: true,
+    },
+    "overwrite-project-files": {
       type: "boolean",
       nullable: true,
     },
@@ -46,15 +77,6 @@ const optionsSchema = {
     },
     "render-service-index": {
       type: "boolean",
-      nullable: true,
-    },
-    format: {
-      type: "string",
-      enum: ["azure-devops", "github", "docfx"],
-      nullable: true,
-    },
-    "api-name": {
-      type: "string",
       nullable: true,
     },
     "route-prefix": {
@@ -73,6 +95,7 @@ const optionsSchema = {
         "service-index": { type: "string", nullable: true },
         "operations-index": { type: "string", nullable: true },
         "types-index": { type: "string", nullable: true },
+        "docfx-project": { type: "string", nullable: true },
       },
       required: [],
     },

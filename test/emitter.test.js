@@ -807,4 +807,164 @@ describe("tsp-api-docs emitter", () => {
       );
     });
   });
+
+  describe("emit-project-files option", () => {
+    it("emits docfx.json by default for docfx format", async () => {
+      const result = await tester
+        .emit("@massivescale/tsp-api-docs", { format: "docfx" })
+        .compile(widgetSource);
+
+      assert.ok(
+        result.outputs["docfx.json"] !== undefined,
+        "docfx.json should be emitted by default",
+      );
+      const config = JSON.parse(result.outputs["docfx.json"]);
+      assert.deepEqual(config.build.template, ["default"]);
+      assert.equal(config.build.dest, "_site");
+    });
+
+    it("omits docfx.json when emit-project-files is false", async () => {
+      const result = await tester
+        .emit("@massivescale/tsp-api-docs", {
+          format: "docfx",
+          "emit-project-files": false,
+        })
+        .compile(widgetSource);
+
+      assert.equal(
+        result.outputs["docfx.json"],
+        undefined,
+        "docfx.json should not be emitted when emit-project-files is false",
+      );
+    });
+
+    it("applies docfx-theme to docfx.json template array", async () => {
+      const result = await tester
+        .emit("@massivescale/tsp-api-docs", {
+          format: "docfx",
+          "docfx-theme": ["default", "my-custom-theme"],
+        })
+        .compile(widgetSource);
+
+      const config = JSON.parse(result.outputs["docfx.json"]);
+      assert.deepEqual(config.build.template, ["default", "my-custom-theme"]);
+    });
+
+    it("does not emit docfx.json for non-docfx formats", async () => {
+      const azureResult = await tester
+        .emit("@massivescale/tsp-api-docs", { format: "azure-devops" })
+        .compile(widgetSource);
+      assert.equal(azureResult.outputs["docfx.json"], undefined);
+
+      const githubResult = await tester
+        .emit("@massivescale/tsp-api-docs", { format: "github" })
+        .compile(widgetSource);
+      assert.equal(githubResult.outputs["docfx.json"], undefined);
+    });
+  });
+
+  describe("emit-relation-diagram option", () => {
+    const relatedSource = `
+      @service(#{ title: "Pet API" })
+      namespace Demo;
+
+      enum PetKind { Cat, Dog }
+
+      model Pet {
+        id: string;
+        kind: PetKind;
+        owner?: Owner;
+      }
+
+      model Owner {
+        id: string;
+        pets: Pet[];
+      }
+
+      op getPet(id: string): Pet;
+    `;
+
+    it("emits relation-diagram.md when enabled", async () => {
+      const result = await tester
+        .emit("@massivescale/tsp-api-docs", { "emit-relation-diagram": true })
+        .compile(relatedSource);
+
+      assert.ok(
+        result.outputs["pet-api/relation-diagram.md"] !== undefined,
+        "relation-diagram.md should be emitted",
+      );
+    });
+
+    it("does not emit relation-diagram.md by default", async () => {
+      const result = await tester
+        .emit("@massivescale/tsp-api-docs")
+        .compile(relatedSource);
+
+      assert.equal(
+        result.outputs["pet-api/relation-diagram.md"],
+        undefined,
+        "relation-diagram.md should not be emitted by default",
+      );
+    });
+
+    it("relation-diagram.md contains a mermaid erDiagram block", async () => {
+      const result = await tester
+        .emit("@massivescale/tsp-api-docs", { "emit-relation-diagram": true })
+        .compile(relatedSource);
+
+      const diagram = result.outputs["pet-api/relation-diagram.md"];
+      assert.ok(diagram.includes("```mermaid"), "should contain a mermaid code block");
+      assert.ok(diagram.includes("erDiagram"), "should use erDiagram syntax");
+      assert.ok(diagram.includes("Pet"), "should include the Pet entity");
+      assert.ok(diagram.includes("Owner"), "should include the Owner entity");
+      assert.ok(diagram.includes("PetKind"), "should include the PetKind enum");
+    });
+
+    it("relation-diagram.md includes relationships between types", async () => {
+      const result = await tester
+        .emit("@massivescale/tsp-api-docs", { "emit-relation-diagram": true })
+        .compile(relatedSource);
+
+      const diagram = result.outputs["pet-api/relation-diagram.md"];
+      // Pet has a PetKind property — expect a relationship line
+      assert.ok(
+        diagram.includes("PetKind"),
+        "diagram should reference PetKind",
+      );
+      // Owner has a Pet[] array — expect a one-to-many relationship
+      assert.ok(
+        diagram.includes("Owner") && diagram.includes("Pet"),
+        "diagram should contain Owner and Pet relationship",
+      );
+    });
+
+    it("adds relation-diagram.md to docfx toc.yml when enabled", async () => {
+      const result = await tester
+        .emit("@massivescale/tsp-api-docs", {
+          format: "docfx",
+          "emit-relation-diagram": true,
+        })
+        .compile(relatedSource);
+
+      assert.ok(
+        result.outputs["pet-api/toc.yml"].includes("Relation Diagram"),
+        "docfx toc.yml should include Relation Diagram entry",
+      );
+      assert.ok(
+        result.outputs["pet-api/toc.yml"].includes("relation-diagram.md"),
+        "docfx toc.yml should link to relation-diagram.md",
+      );
+    });
+
+    it("does not add relation-diagram.md to docfx toc.yml when disabled", async () => {
+      const result = await tester
+        .emit("@massivescale/tsp-api-docs", { format: "docfx" })
+        .compile(relatedSource);
+
+      assert.ok(
+        !result.outputs["pet-api/toc.yml"].includes("relation-diagram.md"),
+        "docfx toc.yml should not reference relation-diagram.md when disabled",
+      );
+    });
+  });
 });
