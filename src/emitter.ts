@@ -641,9 +641,10 @@ function buildRelationDiagram(
           knownTypeNames,
         );
         if (relTarget) {
+          const relLabel = serializeValueAsJson(prop.name);
           const rel = relTarget.isArray
-            ? `  ${name} ||--o{ ${relTarget.typeName} : "${prop.name}"`
-            : `  ${name} }o--|| ${relTarget.typeName} : "${prop.name}"`;
+            ? `  ${name} ||--o{ ${relTarget.typeName} : ${relLabel}`
+            : `  ${name} }o--|| ${relTarget.typeName} : ${relLabel}`;
           const key = `${name}|${relTarget.typeName}|${prop.name}`;
           if (!seenRelationships.has(key)) {
             seenRelationships.add(key);
