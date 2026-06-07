@@ -42,10 +42,10 @@ export function buildRelationDiagram(
         );
         if (relTarget) {
           const relLabel = JSON.stringify(prop.name);
+          const targetCardinality = prop.optional ? "o|" : "||";
           const rel = relTarget.isArray
             ? `  ${name} ||--o{ ${relTarget.typeName} : ${relLabel}`
-            : `  ${name} }o--|| ${relTarget.typeName} : ${relLabel}`;
-          const key = `${name}|${relTarget.typeName}|${prop.name}`;
+            : `  ${name} }o--${targetCardinality} ${relTarget.typeName} : ${relLabel}`;
           if (!seenRelationships.has(key)) {
             seenRelationships.add(key);
             relationships.push(rel);
