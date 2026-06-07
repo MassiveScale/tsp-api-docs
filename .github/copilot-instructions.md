@@ -48,5 +48,15 @@ The output structure mirrors Microsoft Graph style reference docs.
   - `npm test`
 - After code changes, rebuild the example typespec projects under `examples/`
 
-> [IMPORTANT!]
-> Always update the CHANGELOG and README after making changes
+## Afer making changes
+
+- Update the CHANGELOG
+- Update the README.md and any other documentation
+- Validate tests are passing
+  ```powershell
+  npm run test
+  ```
+- Format code
+  ```powershell
+  npm run format
+  ```

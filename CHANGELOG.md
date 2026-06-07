@@ -7,12 +7,17 @@ This project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## Unreleased
+
+---
+
 ## [0.3.1] — 2026-06-07
 
 ### Fixed
 
 - **Service index table cells escaped** — `version`, `title`, and `summaryOrFallback` values in the service index template now pass through the `mdCell` helper, preventing a `|` or newline in a service title or version string from corrupting the Markdown table.
 - **`clean-output-dir` documentation corrected** — the README now accurately states that for `azure-devops` and `github` formats the entire output directory is deleted, rather than claiming only "emitter-generated files" are removed.
+- **`## Optional query parameters` heading restored** — the `cbdc9b0` template formatting refactor accidentally renamed the section to `## Query parameters`. The heading is now `## Optional query parameters` again, matching the Graph-style reference doc convention.
 
 ---
 
