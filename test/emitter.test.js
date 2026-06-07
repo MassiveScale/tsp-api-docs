@@ -839,6 +839,58 @@ describe("tsp-api-docs emitter", () => {
     });
   });
 
+  describe("clean-output-dir option", () => {
+    it("emits all files normally when clean-output-dir is false", async () => {
+      const result = await tester
+        .emit("@massivescale/tsp-api-docs", { "clean-output-dir": false })
+        .compile(widgetSource);
+
+      assert.ok(result.outputs["widget-api.md"] !== undefined);
+      assert.ok(result.outputs["widget-api/api/Get-Widget.md"] !== undefined);
+      assert.ok(result.outputs["widget-api/resources/Widget.md"] !== undefined);
+    });
+  });
+
+  describe("overwrite-project-files option", () => {
+    it("emits docfx.json for docfx format when overwrite-project-files is true", async () => {
+      const result = await tester
+        .emit("@massivescale/tsp-api-docs", {
+          format: "docfx",
+          "overwrite-project-files": true,
+        })
+        .compile(widgetSource);
+
+      assert.ok(
+        result.outputs["docfx.json"] !== undefined,
+        "docfx.json should be emitted when overwrite-project-files is true",
+      );
+    });
+
+    it("still emits all doc pages regardless of overwrite-project-files value", async () => {
+      const falseResult = await tester
+        .emit("@massivescale/tsp-api-docs", {
+          format: "docfx",
+          "overwrite-project-files": false,
+        })
+        .compile(widgetSource);
+      const trueResult = await tester
+        .emit("@massivescale/tsp-api-docs", {
+          format: "docfx",
+          "overwrite-project-files": true,
+        })
+        .compile(widgetSource);
+
+      assert.ok(falseResult.outputs["widget-api/index.md"] !== undefined);
+      assert.ok(
+        falseResult.outputs["widget-api/api/Get-Widget.md"] !== undefined,
+      );
+      assert.ok(trueResult.outputs["widget-api/index.md"] !== undefined);
+      assert.ok(
+        trueResult.outputs["widget-api/api/Get-Widget.md"] !== undefined,
+      );
+    });
+  });
+
   describe("emit-relation-diagram option", () => {
     const relatedSource = `
       @service(#{ title: "Pet API" })

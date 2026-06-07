@@ -9,7 +9,7 @@
 | Version | Link |
 | - | - |
 {{#each versions}}
-| {{version}} | [{{title}}]({{path}}) |
+| {{mdCell version}} | [{{mdCell title}}]({{path}}) |
 {{/each}}
 
 {{/each}}
@@ -22,7 +22,7 @@
 | Service | Summary |
 | - | - |
 {{#each services}}
-| [{{title}}]({{path}}) | {{summaryOrFallback}} |
+| [{{mdCell title}}]({{path}}) | {{mdCell summaryOrFallback}} |
 {{/each}}
 {{else if versionedServices.length}}{{else}}
 No services were found in this TypeSpec program.
