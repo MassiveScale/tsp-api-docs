@@ -1,4 +1,16 @@
-{ "build": { "content": [ { "files": ["**/*.md", "**/toc.yml"], "exclude":
-["_site/**"] } ], "resource": [], "globalMetadata": { "_enableSearch": true },
-"template": [{{#each themes}}"{{this}}"{{#unless @last}}, {{/unless}}{{/each}}],
-"dest": "_site" } }
+{
+  "build": {
+    "content": [
+      {
+        "files": ["**/*.md", "**/toc.yml"],
+        "exclude": ["_site/**"]
+      }
+    ],
+    "resource": [],
+    "globalMetadata": {
+      "_enableSearch": true
+    },
+    "template": [{{#each themes}}"{{this}}"{{#unless @last}}, {{/unless}}{{/each}}],
+    "dest": "_site"
+  }
+}

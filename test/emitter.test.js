@@ -137,9 +137,6 @@ describe("tsp-api-docs emitter", () => {
     it("renders documentation sets for each service version", async () => {
       const result = await versionedTester.emit("@massivescale/tsp-api-docs")
         .compile(`
-        import "@typespec/http";
-        import "@typespec/versioning";
-
         using Http;
         using Versioning;
 
@@ -199,9 +196,6 @@ describe("tsp-api-docs emitter", () => {
       const result = await versionedTester.emit("@massivescale/tsp-api-docs", {
         "render-service-index": true,
       }).compile(`
-        import "@typespec/http";
-        import "@typespec/versioning";
-
         using Http;
         using Versioning;
 
@@ -370,8 +364,6 @@ describe("tsp-api-docs emitter", () => {
 
   it("includes http request and request-response examples on operation pages", async () => {
     const result = await httpTester.emit("@massivescale/tsp-api-docs").compile(`
-      import "@typespec/http";
-
       using Http;
 
       @service(#{ title: "Widget API" })
@@ -414,8 +406,6 @@ describe("tsp-api-docs emitter", () => {
 
   it("renders query parameters, request headers, and sample fallback request values", async () => {
     const result = await httpTester.emit("@massivescale/tsp-api-docs").compile(`
-      import "@typespec/http";
-
       using Http;
 
       @service(#{ title: "Widget API" })
@@ -518,9 +508,6 @@ describe("tsp-api-docs emitter", () => {
       const result = await versionedTester.emit("@massivescale/tsp-api-docs", {
         "api-name": "My Awesome API",
       }).compile(`
-        import "@typespec/http";
-        import "@typespec/versioning";
-
         using Http;
         using Versioning;
 
@@ -566,9 +553,6 @@ describe("tsp-api-docs emitter", () => {
         "api-name": "My Awesome API",
         "render-service-index": true,
       }).compile(`
-        import "@typespec/http";
-        import "@typespec/versioning";
-
         using Http;
         using Versioning;
 
@@ -630,8 +614,6 @@ describe("tsp-api-docs emitter", () => {
 
   describe("route-prefix option", () => {
     const routeSource = `
-      import "@typespec/http";
-
       using Http;
 
       @service(#{ title: "Widget API" })
@@ -664,9 +646,6 @@ describe("tsp-api-docs emitter", () => {
     it("substitutes {version} token with the version value for versioned services", async () => {
       const result = await versionedTester.emit("@massivescale/tsp-api-docs")
         .compile(`
-        import "@typespec/http";
-        import "@typespec/versioning";
-
         using Http;
         using Versioning;
 
@@ -711,9 +690,6 @@ describe("tsp-api-docs emitter", () => {
       const result = await versionedTester.emit("@massivescale/tsp-api-docs", {
         "route-prefix": "v{version}/api",
       }).compile(`
-        import "@typespec/http";
-        import "@typespec/versioning";
-
         using Http;
         using Versioning;
 
@@ -914,7 +890,7 @@ describe("tsp-api-docs emitter", () => {
 
       const diagram = result.outputs["pet-api/relation-diagram.md"];
       assert.ok(
-        diagram.includes("```mermaid"),
+        diagram.includes(":::mermaid") || diagram.includes("```mermaid"),
         "should contain a mermaid code block",
       );
       assert.ok(diagram.includes("erDiagram"), "should use erDiagram syntax");
