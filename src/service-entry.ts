@@ -1,7 +1,10 @@
 import {
   getDoc,
   getSummary,
+  isArrayModelType,
+  isRecordModelType,
   listServices,
+  walkPropertiesInherited,
   type Enum,
   type Model,
   type Namespace,
@@ -309,7 +312,7 @@ export function buildRelatedMethodsByType(
   for (const typeEntry of types) {
     const methods = operations
       .filter((operationEntry) =>
-        operationUsesType(operationEntry.operation, typeEntry.type),
+        operationUsesType(program, operationEntry.operation, typeEntry.type),
       )
       .map((operationEntry) => ({
         name: operationEntry.name,
@@ -332,16 +335,23 @@ export function buildRelatedMethodsByType(
 }
 
 export function operationUsesType(
+  program: Program,
   operation: Operation,
   target: Model | Enum | Union | Scalar,
 ): boolean {
   return (
-    typeContainsTarget(operation.returnType, target, new Set<Type>()) ||
-    typeContainsTarget(operation.parameters, target, new Set<Type>())
+    typeContainsTarget(
+      program,
+      operation.returnType,
+      target,
+      new Set<Type>(),
+    ) ||
+    typeContainsTarget(program, operation.parameters, target, new Set<Type>())
   );
 }
 
 function typeContainsTarget(
+  program: Program,
   type: Type,
   target: Model | Enum | Union | Scalar,
   visited: Set<Type>,
@@ -357,17 +367,24 @@ function typeContainsTarget(
   }
 
   switch (type.kind) {
-    case "Model":
-      return [...type.properties.values()].some((property) =>
-        typeContainsTarget(property.type, target, visited),
+    case "Model": {
+      if (isArrayModelType(program, type) || isRecordModelType(program, type)) {
+        const elementType = type.indexer?.value;
+        return elementType
+          ? typeContainsTarget(program, elementType, target, visited)
+          : false;
+      }
+      return [...walkPropertiesInherited(type)].some((property) =>
+        typeContainsTarget(program, property.type, target, visited),
       );
+    }
     case "Union":
       return [...type.variants.values()].some((variant) =>
-        typeContainsTarget(variant.type, target, visited),
+        typeContainsTarget(program, variant.type, target, visited),
       );
     case "Tuple":
       return type.values.some((value) =>
-        typeContainsTarget(value, target, visited),
+        typeContainsTarget(program, value, target, visited),
       );
     default:
       return false;

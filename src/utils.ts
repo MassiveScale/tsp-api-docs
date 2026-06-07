@@ -203,3 +203,16 @@ export function asRecord(value: unknown): Record<string, unknown> | undefined {
     ? (value as Record<string, unknown>)
     : undefined;
 }
+
+export function applyRoutePrefix(
+  uriTemplate: string,
+  resolvedPrefix: string,
+): string {
+  if (!resolvedPrefix) return uriTemplate;
+  const cleanPrefix = resolvedPrefix.replace(/^\//, "").replace(/\/$/, "");
+  if (!cleanPrefix) return uriTemplate;
+  const pathPart = uriTemplate.startsWith("/")
+    ? uriTemplate
+    : `/${uriTemplate}`;
+  return `/${cleanPrefix}${pathPart}`;
+}

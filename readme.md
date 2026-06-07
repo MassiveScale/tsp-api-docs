@@ -17,6 +17,8 @@ Supports multiple output formats targeting Azure DevOps Wiki, GitHub, and DocFx.
 - Response headers documented per operation.
 - Request body examples automatically omit read-only and immutable properties based on HTTP verb visibility.
 - Type names rendered exactly as defined — no CamelCase splitting in page titles.
+- Related-methods table on type pages correctly includes operations that return arrays of that type or use derived models (via `extends`).
+- DocFx `toc.yml` output is YAML-safe — service and page titles containing colons or other special characters are properly quoted.
 
 ## Prerequisites
 

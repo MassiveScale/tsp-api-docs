@@ -89,7 +89,7 @@ export async function $onEmit(context: EmitContext<ApiDocsEmitterOptions>) {
   const emitProjectFiles = context.options["emit-project-files"] ?? true;
   const overwriteProjectFiles =
     context.options["overwrite-project-files"] ?? false;
-  const docfxThemes = context.options["docfx-theme"] ?? ["default"];
+  const docfxThemes = context.options["docfx-theme"] ?? ["default", "modern"];
   const emitRelationDiagram = context.options["emit-relation-diagram"] ?? false;
 
   const templateOverrides = resolveTemplateOverrides(
