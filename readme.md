@@ -57,15 +57,20 @@ options:
 
 ### Options
 
-| Option                 | Type                                        | Default          | Description                                                                                                               |
-| ---------------------- | ------------------------------------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `emitter-output-dir`   | `string`                                    | `./tsp-output`   | Output directory for generated files.                                                                                     |
-| `format`               | `"azure-devops"` \| `"github"` \| `"docfx"` | `"azure-devops"` | Output format. See [Output Formats](#output-formats) below.                                                               |
-| `page-title-prefix`    | `string`                                    | —                | Fallback title prefix used when the service has no explicit title.                                                        |
-| `render-service-index` | `boolean`                                   | `false`          | Emit a root index page listing all services.                                                                              |
-| `api-name`             | `string`                                    | —                | API name prefix for file/folder slugs. See [API Name](#api-name) below.                                                   |
-| `route-prefix`         | `string`                                    | `api/{version}`  | Prefix prepended to HTTP request paths. Supports `{version}` token substitution. See [Route Prefix](#route-prefix) below. |
-| `templates`            | `TemplateOverrides`                         | —                | Per-template path overrides for custom Handlebars templates. See [Custom Templates](#custom-templates) below.             |
+| Option                    | Type                                        | Default          | Description                                                                                                                                                                                                                                                                                                                          |
+| ------------------------- | ------------------------------------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `api-name`                | `string`                                    | —                | API name prefix for file/folder slugs. See [API Name](#api-name) below.                                                                                                                                                                                                                                                              |
+| `clean-output-dir`        | `boolean`                                   | `true`           | Before emitting, deletes the entire `emitter-output-dir` for `azure-devops` and `github` formats. For `docfx`, enumerates and removes only non-project files, preserving `docfx.json`. Do not point `emitter-output-dir` at a directory that contains unrelated files when this is `true`. Set to `false` to skip cleaning entirely. |
+| `docfx-theme`             | `string[]`                                  | `["default"]`    | DocFx template names applied to the `build.template` array in the generated `docfx.json`. Only used with `format: docfx`.                                                                                                                                                                                                            |
+| `emit-project-files`      | `boolean`                                   | `true`           | When `true`, emits project/configuration files (e.g. `docfx.json`). Set to `false` to emit documentation files only.                                                                                                                                                                                                                 |
+| `emit-relation-diagram`   | `boolean`                                   | `false`          | When `true`, emits a `relation-diagram.md` containing a Mermaid ER diagram of all types for each service.                                                                                                                                                                                                                            |
+| `emitter-output-dir`      | `string`                                    | `./tsp-output`   | Output directory for generated files.                                                                                                                                                                                                                                                                                                |
+| `format`                  | `"azure-devops"` \| `"github"` \| `"docfx"` | `"azure-devops"` | Output format. See [Output Formats](#output-formats) below.                                                                                                                                                                                                                                                                          |
+| `overwrite-project-files` | `boolean`                                   | `false`          | When `false`, project files are only written if they do not already exist. Set to `true` to always overwrite them.                                                                                                                                                                                                                   |
+| `page-title-prefix`       | `string`                                    | —                | Fallback title prefix used when the service has no explicit title.                                                                                                                                                                                                                                                                   |
+| `render-service-index`    | `boolean`                                   | `false`          | Emit a root index page listing all services.                                                                                                                                                                                                                                                                                         |
+| `route-prefix`            | `string`                                    | `api/{version}`  | Prefix prepended to HTTP request paths. Supports `{version}` token substitution. See [Route Prefix](#route-prefix) below.                                                                                                                                                                                                            |
+| `templates`               | `TemplateOverrides`                         | —                | Per-template path overrides for custom Handlebars templates. See [Custom Templates](#custom-templates) below.                                                                                                                                                                                                                        |
 
 ## Output Formats
 
@@ -105,20 +110,56 @@ tsp-output/
 
 ### `docfx`
 
-Generates structure compatible with a **DocFx** project. Each service folder contains an `index.md` overview and a `toc.yml` table of contents for navigation. When `render-service-index: true`, a root `toc.yml` is also emitted.
+Generates structure compatible with a **DocFx** project. Each service folder contains an `index.md` overview and a `toc.yml` table of contents for navigation. When `render-service-index: true`, a root `toc.yml` is also emitted. A `docfx.json` project configuration file is emitted at the output root by default (see [DocFx Project Files](#docfx-project-files)).
 
 ```text
 tsp-output/
+  docfx.json                        # project config (emit-project-files: true)
   index.md                          # root index (render-service-index: true)
   toc.yml                           # root TOC (render-service-index: true)
   <service-slug>/
     index.md                        # overview
     toc.yml                         # service TOC (Overview / API / Resources)
+    relation-diagram.md             # Mermaid ER diagram (emit-relation-diagram: true)
     api/
       <Operation>.md
     resources/
       <Type>.md
 ```
+
+### DocFx Project Files
+
+When `format: docfx` is used, the emitter writes a `docfx.json` configuration file at the output root. This file is only written if it does not already exist (controlled by `overwrite-project-files`). To skip it entirely, set `emit-project-files: false`.
+
+The `docfx-theme` option populates the `build.template` array in the generated config:
+
+```yaml
+options:
+  "@massivescale/tsp-api-docs":
+    format: docfx
+    docfx-theme:
+      - default
+      - my-custom-theme
+```
+
+### Relation Diagram
+
+When `emit-relation-diagram: true`, a `relation-diagram.md` file is emitted in each service folder. It contains a Mermaid `erDiagram` block that shows all emitted types and their relationships:
+
+```yaml
+options:
+  "@massivescale/tsp-api-docs":
+    emit-relation-diagram: true
+```
+
+The code fence syntax is automatically selected per format — Azure DevOps Wiki uses `:::mermaid` / `:::` while GitHub and DocFx use ` ```mermaid ` / ` ``` `.
+
+The diagram includes:
+
+- Models as entities with their properties and types
+- Enums as entities with their members
+- Unions as entities with their named variants
+- Relationship lines between models that reference other service types
 
 ## API Name
 
@@ -206,15 +247,16 @@ Only the templates you list are overridden; all others continue to use the built
 
 ### Available template keys
 
-| Key                | Built-in file                       | Renders                             |
-| ------------------ | ----------------------------------- | ----------------------------------- |
-| `overview`         | `templates/overview.md.hbs`         | Service overview page               |
-| `operation`        | `templates/operation.md.hbs`        | Individual operation reference page |
-| `type`             | `templates/type.md.hbs`             | Type page (models, unions, scalars) |
-| `enum`             | `templates/enum.md.hbs`             | Enum type page                      |
-| `service-index`    | `templates/service-index.md.hbs`    | Root service index                  |
-| `operations-index` | `templates/operations-index.md.hbs` | `api/` sub-folder index             |
-| `types-index`      | `templates/types-index.md.hbs`      | `resources/` sub-folder index       |
+| Key                | Built-in file                       | Renders                                               |
+| ------------------ | ----------------------------------- | ----------------------------------------------------- |
+| `overview`         | `templates/overview.md.hbs`         | Service overview page                                 |
+| `operation`        | `templates/operation.md.hbs`        | Individual operation reference page                   |
+| `type`             | `templates/type.md.hbs`             | Type page (models, unions, scalars)                   |
+| `enum`             | `templates/enum.md.hbs`             | Enum type page                                        |
+| `service-index`    | `templates/service-index.md.hbs`    | Root service index                                    |
+| `operations-index` | `templates/operations-index.md.hbs` | `api/` sub-folder index                               |
+| `types-index`      | `templates/types-index.md.hbs`      | `resources/` sub-folder index                         |
+| `docfx-project`    | `templates/docfx.json.hbs`          | DocFx `docfx.json` project config (docfx format only) |
 
 ### Template variables
 

@@ -7,11 +7,42 @@ This project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
-## [Unreleased]
+## Unreleased
+
+### Changed
+
+- **Test suite split by source module** — `test/emitter.test.js` now covers only emitter-level concerns (output formats, service index, project-file options); tests for `src/service-entry.ts`, `src/operation-page.ts`, `src/type-page.ts`, `src/relation-diagram.ts`, and `src/templates.ts` live in their own matching test files. `test/output.test.js` is unchanged.
+
+---
+
+## [0.3.1] — 2026-06-07
 
 ### Fixed
 
+- **Service index table cells escaped** — `version`, `title`, and `summaryOrFallback` values in the service index template now pass through the `mdCell` helper, preventing a `|` or newline in a service title or version string from corrupting the Markdown table.
+- **`clean-output-dir` documentation corrected** — the README now accurately states that for `azure-devops` and `github` formats the entire output directory is deleted, rather than claiming only "emitter-generated files" are removed.
+- **`## Optional query parameters` heading restored** — the `cbdc9b0` template formatting refactor accidentally renamed the section to `## Query parameters`. The heading is now `## Optional query parameters` again, matching the Graph-style reference doc convention.
+
+---
+
+## [0.3.0] — 2026-06-06
+
+### Added
+
+- **`docfx-theme` option** — string array of DocFx template names applied to the `build.template` array in the generated `docfx.json`. When not provided, defaults to `["default"]`. Only has effect with `format: docfx`.
+- **`emit-project-files` option** — when `true` (default), the emitter writes project/configuration files such as `docfx.json` for the DocFx format. Set to `false` to emit documentation files only.
+- **`emit-relation-diagram` option** — when `true`, the emitter writes a `relation-diagram.md` file in each service directory containing a Mermaid `erDiagram` of all emitted types and their relationships. For the `docfx` format the diagram is also linked in the service `toc.yml`.
+- **`overwrite-project-files` option** — when `false` (default), project/configuration files (e.g. `docfx.json`) are only written if they do not already exist on disk. Set to `true` to always overwrite them. Has no effect on formats that do not emit project files.
+- **DocFx `docfx.json` emission** — the DocFx format now automatically emits a `docfx.json` project configuration file at the output root, controlled by `emit-project-files` and `overwrite-project-files`.
+- **`clean-output-dir` option** — when `true` (default), the emitter removes all previously generated documentation files from `emitter-output-dir` before writing new output, preventing stale files from accumulating. Project/configuration files (e.g. `docfx.json`) are always preserved regardless of this setting. Set to `false` to skip cleaning entirely.
+
+### Fixed
+
+- **`clean-output-dir` preserves project files** — the directory clean now enumerates only non-project-file entries and deletes them individually, so `docfx.json` (and equivalent files for other formats) survive the clean. Previously the entire output directory was wiped, making `overwrite-project-files: false` ineffective on subsequent runs.
+- **Markdown tables render correctly** — all Handlebars templates have been rewritten so that each table row is emitted on a single line. Previously, indented `{{#each}}` blocks caused every cell to appear on its own line, which prevented `CliPrettify` from aligning the columns.
+- **`docfx.json` is now template-driven** — the DocFx project file is rendered from `templates/docfx.json.hbs` (overridable via the `templates["docfx-project"]` option) instead of being hardcoded in TypeScript.
 - **Type names are exact** — type page titles and file names now use the type name exactly as defined in TypeSpec (e.g. `WidgetList.md`, `AnalyzeResult.md`) instead of splitting CamelCase into hyphenated/spaced forms (`Widget-List.md`, `Analyze Result`).
+- **No-explicit-any lint error** — the JSON schema for the `templates` option now uses a safe double-cast through `unknown` instead of `as any`.
 
 ---
 

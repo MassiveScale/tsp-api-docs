@@ -5,7 +5,7 @@
 
 {{/if}}
 {{#if deprecated}}
-Deprecated: {{deprecated}}
+> Deprecated: {{deprecated}}
 
 {{/if}}
 {{#if versionLabel}}
@@ -25,8 +25,8 @@ Base type: {{baseType}}
 {{#if methods.length}}
 ## Methods
 
-| Method                      | Returns               | Summary                      |
-| --------------------------- | --------------------- | ---------------------------- |
+| Method | Returns | Summary |
+| - | - | - |
 {{#each methods}}
 | [{{mdCell name}}]({{path}}) | {{mdCell returnType}} | {{mdCell summaryOrFallback}} |
 {{/each}}
@@ -35,29 +35,32 @@ Base type: {{baseType}}
 {{#if properties.length}}
 ## Properties
 
-| Name            | Type            | Required                 | Summary                      |
-| ---------------- | ---------------- | ----------------------- | --------------------------- |
+| Name | Type | Required | Summary |
+| - | - | - | - |
 {{#each properties}}
 | {{mdCell name}} | {{mdCell type}} | {{mdCell requiredLabel}} | {{mdCell summaryOrFallback}} |
 {{/each}}
+
 {{/if}}
 {{#if variants.length}}
 ## Variants
 
-| Name            | Type            | Summary                      |
-| --------------- | --------------- | ---------------------------- |
+| Name | Type | Summary |
+| - | - | - |
 {{#each variants}}
 | {{mdCell name}} | {{mdCell type}} | {{mdCell summaryOrFallback}} |
 {{/each}}
+
 {{/if}}
 {{#if members.length}}
 ## Members
 
-| Name            | Value            | Summary                      |
-| --------------- | ---------------- | ---------------------------- |
+| Name | Value | Summary |
+| - | - | - |
 {{#each members}}
 | {{mdCell name}} | {{mdCell value}} | {{mdCell summaryOrFallback}} |
 {{/each}}
+
 {{/if}}
 {{#if jsonRepresentation}}
 ## JSON representation

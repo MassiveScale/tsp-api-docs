@@ -5,7 +5,7 @@
 
 {{/if}}
 {{#if deprecated}}
-Deprecated: {{deprecated}}
+> Deprecated: {{deprecated}}
 
 {{/if}}
 {{#if versionLabel}}
@@ -27,29 +27,25 @@ Path: {{join breadcrumbs " > "}}
 ## Optional query parameters
 
 {{#if optionalQueryParameters.length}}
-| Name             | Type           | Required                 | Summary                      |
-| ---------------- | -------------- | ------------------------ | ---------------------------- |
+| Name | Type | Required | Summary |
+| - | - | - | - |
 {{#each optionalQueryParameters}}
 | {{mdCell name}} | {{mdCell type}} | {{mdCell requiredLabel}} | {{mdCell summaryOrFallback}} |
 {{/each}}
-
 {{else}}
 This method does not support query parameters.
-
 {{/if}}
 
 ## Request headers
 
 {{#if requestHeaders.length}}
-| Name             | Type           | Required                 | Summary                      |
-| ---------------- | -------------- | ------------------------ | ---------------------------- |
+| Name | Type | Required | Summary |
+| - | - | - | - |
 {{#each requestHeaders}}
 | {{mdCell name}} | {{mdCell type}} | {{mdCell requiredLabel}} | {{mdCell summaryOrFallback}} |
 {{/each}}
-
 {{else}}
 No custom request headers are required for this method.
-
 {{/if}}
 
 ## Request body
@@ -67,7 +63,6 @@ Supported content types: `{{join requestBody.contentTypes ", "}}`
 {{/if}}
 {{else}}
 Don't supply a request body for this method.
-
 {{/if}}
 
 ## Response
@@ -79,8 +74,8 @@ Don't supply a request body for this method.
 
 {{/if}}
 {{#if responses.length}}
-| Status code           | Type            | Description            |
-| --------------------- | --------------- | ---------------------- |
+| Status code | Type | Description |
+| - | - | - |
 {{#each responses}}
 | {{mdCell statusCode}} | {{mdCell type}} | {{mdCell description}} |
 {{/each}}
@@ -90,8 +85,8 @@ Don't supply a request body for this method.
 ### Parameters
 
 {{#if parameters.length}}
-| Name            | Type             | Required                | Summary                      |
-| --------------- | ---------------- | ----------------------- | ---------------------------- |
+| Name | Type | Required | Summary |
+| - | - | - | - |
 {{#each parameters}}
 | {{mdCell name}} | {{mdCell type}} | {{mdCell requiredLabel}} | {{mdCell summaryOrFallback}} |
 {{/each}}
@@ -103,17 +98,14 @@ This method does not declare request parameters.
 ## Response headers
 
 {{#if responseHeaders.length}}
-| Name             | Type           | Required                 | Summary                      |
-| ---------------- | -------------- | ------------------------ | ---------------------------- |
+| Name | Type | Required | Summary |
+| - | - | - | - |
 {{#each responseHeaders}}
 | {{mdCell name}} | {{mdCell type}} | {{mdCell requiredLabel}} | {{mdCell summaryOrFallback}} |
 {{/each}}
-
 {{else}}
 This method does not return custom response headers.
-
 {{/if}}
-
 
 ## Errors
 
@@ -121,7 +113,6 @@ This method does not return custom response headers.
 
 {{/if}}
 {{#if examples.length}}
-
 ## Examples
 
 {{#each examples}}
@@ -131,7 +122,6 @@ This method does not return custom response headers.
 {{description}}
 
 {{/if}}
-
 #### Request
 
 ```http
@@ -149,5 +139,4 @@ This method does not return custom response headers.
 {{/each}}
 {{else}}
 No examples provided.
-
 {{/if}}

@@ -13,6 +13,7 @@ export interface TemplateBundle {
   serviceIndex: string;
   operationsIndex: string;
   typesIndex: string;
+  docfxProject: string;
 }
 
 export function loadTemplates(
@@ -32,6 +33,7 @@ export function loadTemplates(
       overrides["operations-index"],
     ),
     typesIndex: loadTemplate("types-index.md.hbs", overrides["types-index"]),
+    docfxProject: loadTemplate("docfx.json.hbs", overrides["docfx-project"]),
   };
 }
 

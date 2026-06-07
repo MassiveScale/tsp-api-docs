@@ -5,7 +5,7 @@
 
 {{/if}}
 {{#if deprecated}}
-Deprecated: {{deprecated}}
+> Deprecated: {{deprecated}}
 
 {{/if}}
 {{#if versionLabel}}
@@ -21,11 +21,12 @@ Path: {{join breadcrumbs " > "}}
 {{#if members.length}}
 ## Members
 
-| Name            | Value            | Summary                      |
-| --------------- | ---------------- | ---------------------------- |
+| Name | Value | Summary |
+| - | - | - |
 {{#each members}}
 | {{mdCell name}} | {{mdCell value}} | {{mdCell summaryOrFallback}} |
 {{/each}}
+
 {{/if}}
 {{#if examples.length}}
 ## Examples
