@@ -9,6 +9,10 @@ This project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
+### Changed
+
+- **Test suite split by source module** — `test/emitter.test.js` now covers only emitter-level concerns (output formats, service index, project-file options); tests for `src/service-entry.ts`, `src/operation-page.ts`, `src/type-page.ts`, `src/relation-diagram.ts`, and `src/templates.ts` live in their own matching test files. `test/output.test.js` is unchanged.
+
 ---
 
 ## [0.3.1] — 2026-06-07
