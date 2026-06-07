@@ -108,6 +108,33 @@ describe("relation diagram", () => {
     );
   });
 
+  it("resolves array element types via the first property fallback when indexer is absent", async () => {
+    // A named model that extends Array<T> is treated as an array by isArrayModelType but
+    // may carry its element type as the first property rather than via indexer. The
+    // relation-diagram must use the same indexer?.value ?? properties[0]?.type fallback
+    // as typeReference() / makeLinkedTypeRef() so the relationship is not silently dropped.
+    const result = await tester.emit("@massivescale/tsp-api-docs", {
+      "emit-relation-diagram": true,
+    }).compile(`
+        @service(#{ title: "List API" })
+        namespace Demo;
+
+        model Widget { id: string; }
+
+        model WidgetList extends Array<Widget> {}
+
+        op list(): WidgetList;
+      `);
+
+    const diagram = result.outputs["list-api/relation-diagram.md"];
+    assert.ok(diagram !== undefined, "relation-diagram.md should be emitted");
+    assert.ok(diagram.includes("Widget"), "diagram should reference Widget");
+    assert.ok(
+      diagram.includes("WidgetList"),
+      "diagram should reference WidgetList",
+    );
+  });
+
   it("does not add relation-diagram.md to docfx toc.yml when disabled", async () => {
     const result = await tester
       .emit("@massivescale/tsp-api-docs", { format: "docfx" })

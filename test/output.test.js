@@ -71,6 +71,21 @@ describe("cleanDocFiles", () => {
     }
   });
 
+  it("rethrows non-ENOENT errors from readdir (docfx format)", async () => {
+    // Place a plain file where a directory is expected so readdir fails with ENOTDIR.
+    const path = join(tmpdir(), `tsp-api-docs-notdir-${Date.now()}`);
+    await writeFile(path, "not a directory");
+    try {
+      await assert.rejects(
+        cleanDocFiles(path, "docfx"),
+        (err) => err.code === "ENOTDIR",
+        "should rethrow ENOTDIR — only ENOENT should be suppressed",
+      );
+    } finally {
+      await rm(path, { force: true });
+    }
+  });
+
   it("does nothing when the directory does not exist (azure-devops)", async () => {
     const dir = join(tmpdir(), `tsp-api-docs-nonexistent-${Date.now()}`);
     await assert.doesNotReject(

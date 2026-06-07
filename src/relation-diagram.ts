@@ -97,7 +97,8 @@ function resolveErRelationTarget(
 ): ErRelationTarget | undefined {
   if (type.kind === "Model") {
     if (isArrayModelType(program, type)) {
-      const valueType = type.indexer?.value;
+      const valueType =
+        type.indexer?.value ?? [...type.properties.values()][0]?.type;
       if (
         valueType &&
         (valueType.kind === "Model" ||
@@ -131,7 +132,8 @@ function erAttrType(program: Program, type: Type): string {
       return sanitizeErName(type.name);
     case "Model":
       if (isArrayModelType(program, type)) {
-        const valueType = type.indexer?.value;
+        const valueType =
+          type.indexer?.value ?? [...type.properties.values()][0]?.type;
         const elemName = valueType ? erAttrType(program, valueType) : "unknown";
         return `${elemName}_array`;
       }

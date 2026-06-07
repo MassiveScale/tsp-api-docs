@@ -180,7 +180,9 @@ export async function cleanDocFiles(
         force: true,
       });
     }
-  } catch {
-    // Directory doesn't exist yet — nothing to clean.
+  } catch (err) {
+    // Ignore only ENOENT (directory doesn't exist yet); rethrow everything else
+    // so permission errors and transient IO failures are not silently swallowed.
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
   }
 }
