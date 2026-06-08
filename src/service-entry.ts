@@ -387,7 +387,9 @@ function typeDirectlyReferencesTarget(
     }
     case "Union": {
       for (const variant of type.variants.values()) {
-        if (typeDirectlyReferencesTarget(program, variant.type, target, visited)) {
+        if (
+          typeDirectlyReferencesTarget(program, variant.type, target, visited)
+        ) {
           return true;
         }
       }

@@ -53,8 +53,7 @@ describe("type page", () => {
 
     // Widget.md must only show operations that directly address Widget —
     // list() returns WidgetList (not Widget), so it must not appear here.
-    const widgetPage =
-      result.outputs["relationship-api/resources/Widget.md"];
+    const widgetPage = result.outputs["relationship-api/resources/Widget.md"];
     assert.ok(widgetPage.includes("[read](../api/Widgets-Read.md)"));
     assert.ok(widgetPage.includes("[create](../api/Widgets-Create.md)"));
     assert.ok(!widgetPage.includes("[list](../api/Widgets-List.md)"));
@@ -88,7 +87,8 @@ describe("type page", () => {
 
     // ErrorResponse.md must have no Methods section at all —
     // @error types are cross-cutting envelopes, not addressable entities.
-    const errorPage = result.outputs["error-test-api/resources/ErrorResponse.md"];
+    const errorPage =
+      result.outputs["error-test-api/resources/ErrorResponse.md"];
     assert.ok(!errorPage.includes("## Methods"));
   });
 });
