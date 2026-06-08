@@ -204,6 +204,7 @@ export function asRecord(value: unknown): Record<string, unknown> | undefined {
     : undefined;
 }
 
+/** Prefixes an HTTP URI template with a resolved route prefix, normalizing slashes. */
 export function applyRoutePrefix(
   uriTemplate: string,
   resolvedPrefix: string,
