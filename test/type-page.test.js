@@ -50,5 +50,45 @@ describe("type page", () => {
     assert.ok(!widgetListPage.includes("### items"));
     assert.ok(!widgetListPage.includes("| [read](api/Widgets-Read.md) |"));
     assert.ok(!widgetListPage.includes("| [create](api/Widgets-Create.md) |"));
+
+    // Widget.md must only show operations that directly address Widget —
+    // list() returns WidgetList (not Widget), so it must not appear here.
+    const widgetPage = result.outputs["relationship-api/resources/Widget.md"];
+    assert.ok(widgetPage.includes("[read](../api/Widgets-Read.md)"));
+    assert.ok(widgetPage.includes("[create](../api/Widgets-Create.md)"));
+    assert.ok(!widgetPage.includes("[list](../api/Widgets-List.md)"));
+  });
+
+  it("does not show related methods on @error-decorated types", async () => {
+    const result = await tester.emit("@massivescale/tsp-api-docs").compile(`
+      @service(#{ title: "Error Test API" })
+      namespace Demo;
+
+      model Widget {
+        id: string;
+      }
+
+      @error
+      model ErrorResponse {
+        code: string;
+        message: string;
+      }
+
+      interface Widgets {
+        op read(id: string): Widget | ErrorResponse;
+        op create(body: Widget): Widget | ErrorResponse;
+      }
+    `);
+
+    // Widget.md should have read and create — they directly address Widget.
+    const widgetPage = result.outputs["error-test-api/resources/Widget.md"];
+    assert.ok(widgetPage.includes("[read](../api/Widgets-Read.md)"));
+    assert.ok(widgetPage.includes("[create](../api/Widgets-Create.md)"));
+
+    // ErrorResponse.md must have no Methods section at all —
+    // @error types are cross-cutting envelopes, not addressable entities.
+    const errorPage =
+      result.outputs["error-test-api/resources/ErrorResponse.md"];
+    assert.ok(!errorPage.includes("## Methods"));
   });
 });
