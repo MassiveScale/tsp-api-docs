@@ -91,10 +91,21 @@ export function adjustOverviewPathsForAzureDevOps(
       ...op,
       path: `${slug}/${op.path}`,
       returnType: prefixRelativeMarkdownLinks(op.returnType, slug),
+      summary: op.summary
+        ? prefixRelativeMarkdownLinks(op.summary, slug)
+        : op.summary,
+      summaryOrFallback: prefixRelativeMarkdownLinks(
+        op.summaryOrFallback,
+        slug,
+      ),
     })),
     types: overview.types.map((t) => ({
       ...t,
       path: `${slug}/${t.path}`,
+      summary: t.summary
+        ? prefixRelativeMarkdownLinks(t.summary, slug)
+        : t.summary,
+      summaryOrFallback: prefixRelativeMarkdownLinks(t.summaryOrFallback, slug),
     })),
   };
 }
@@ -112,6 +123,11 @@ function prefixRelativeMarkdownLinks(text: string, prefix: string): string {
   });
 }
 
+/** Wraps a YAML scalar value in double quotes, escaping any internal double quotes. */
+function yamlString(value: string): string {
+  return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
+
 export function buildDocFxServiceTocContent(
   service: ServiceEntry,
   includeRelationDiagram = false,
@@ -127,7 +143,7 @@ export function buildDocFxServiceTocContent(
     lines.push(`- name: API`);
     lines.push(`  items:`);
     for (const op of service.operations) {
-      lines.push(`  - name: ${op.page.title}`);
+      lines.push(`  - name: ${yamlString(op.page.title)}`);
       lines.push(`    href: api/${op.slug}.md`);
     }
   }
@@ -135,7 +151,7 @@ export function buildDocFxServiceTocContent(
     lines.push(`- name: Resources`);
     lines.push(`  items:`);
     for (const type of service.types) {
-      lines.push(`  - name: ${type.page.title}`);
+      lines.push(`  - name: ${yamlString(type.page.title)}`);
       lines.push(`    href: resources/${type.slug}.md`);
     }
   }
@@ -147,7 +163,7 @@ export function buildDocFxRootTocContent(
 ): string {
   const lines: string[] = [];
   for (const service of services) {
-    lines.push(`- name: ${service.title}`);
+    lines.push(`- name: ${yamlString(service.title)}`);
     lines.push(`  href: ${service.path}`);
   }
   return lines.join("\n") + "\n";
@@ -173,13 +189,16 @@ export async function cleanDocFiles(
   }
   try {
     const entries = await readdir(outputDir, { withFileTypes: true });
-    for (const entry of entries) {
-      if (projectFiles.has(entry.name)) continue;
-      await rm(resolvePath(outputDir, entry.name), {
-        recursive: true,
-        force: true,
-      });
-    }
+    await Promise.all(
+      entries
+        .filter((entry) => !projectFiles.has(entry.name))
+        .map((entry) =>
+          rm(resolvePath(outputDir, entry.name), {
+            recursive: true,
+            force: true,
+          }),
+        ),
+    );
   } catch (err) {
     // Ignore only ENOENT (directory doesn't exist yet); rethrow everything else
     // so permission errors and transient IO failures are not silently swallowed.

@@ -7,6 +7,7 @@ import {
 } from "@typespec/compiler";
 import type { OutputFormat } from "./lib.js";
 import type { ServiceEntry } from "./service-entry.js";
+import { arrayElementType } from "./type-ref.js";
 
 interface ErRelationTarget {
   typeName: string;
@@ -97,8 +98,7 @@ function resolveErRelationTarget(
 ): ErRelationTarget | undefined {
   if (type.kind === "Model") {
     if (isArrayModelType(program, type)) {
-      const valueType =
-        type.indexer?.value ?? [...type.properties.values()][0]?.type;
+      const valueType = arrayElementType(type);
       if (
         valueType &&
         (valueType.kind === "Model" ||
@@ -132,8 +132,7 @@ function erAttrType(program: Program, type: Type): string {
       return sanitizeErName(type.name);
     case "Model":
       if (isArrayModelType(program, type)) {
-        const valueType =
-          type.indexer?.value ?? [...type.properties.values()][0]?.type;
+        const valueType = arrayElementType(type);
         const elemName = valueType ? erAttrType(program, valueType) : "unknown";
         return `${elemName}_array`;
       }
