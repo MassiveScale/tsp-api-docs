@@ -217,7 +217,7 @@ describe("tsp-api-docs emitter", () => {
           "[Widget API](widget-api/index.md)",
         ),
       );
-      assert.ok(result.outputs["toc.yml"].includes("- name: Widget API"));
+      assert.ok(result.outputs["toc.yml"].includes('- name: "Widget API"'));
       assert.ok(
         result.outputs["toc.yml"].includes("href: widget-api/index.md"),
       );
@@ -235,7 +235,7 @@ describe("tsp-api-docs emitter", () => {
         "docfx.json should be emitted by default",
       );
       const config = JSON.parse(result.outputs["docfx.json"]);
-      assert.deepEqual(config.build.template, ["default"]);
+      assert.deepEqual(config.build.template, ["default", "modern"]);
       assert.equal(config.build.dest, "_site");
     });
 

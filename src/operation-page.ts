@@ -23,6 +23,7 @@ import {
   typeReference,
 } from "./type-ref.js";
 import {
+  applyRoutePrefix,
   FALLBACK_SUMMARY,
   breadcrumbsForOperation,
   describeSummary,
@@ -166,24 +167,6 @@ export function formatParametersSignature(
         `${property.name}${property.requiredLabel === "No" ? "?" : ""}: ${property.type}`,
     )
     .join(", ");
-}
-
-function applyRoutePrefix(uriTemplate: string, resolvedPrefix: string): string {
-  if (!resolvedPrefix) return uriTemplate;
-  const cleanPrefix = resolvedPrefix.replace(/^\//, "").replace(/\/$/, "");
-  if (!cleanPrefix) return uriTemplate;
-  const pathPart = uriTemplate.startsWith("/")
-    ? uriTemplate
-    : `/${uriTemplate}`;
-  return `/${cleanPrefix}${pathPart}`;
-}
-
-export function resolveRoutePrefix(
-  routePrefix: string,
-  version?: string,
-): string {
-  const substituted = routePrefix.replace(/\{version\}/g, version ?? "");
-  return substituted.replace(/\/+/g, "/").replace(/\/$/, "");
 }
 
 function formatHttpRequest(

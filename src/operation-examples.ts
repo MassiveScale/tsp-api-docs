@@ -17,7 +17,12 @@ import {
   type Visibility,
 } from "@typespec/http";
 import { jsonValueForType } from "./type-ref.js";
-import { asRecord, formatStatusCode, isSuccessStatusCode } from "./utils.js";
+import {
+  applyRoutePrefix,
+  asRecord,
+  formatStatusCode,
+  isSuccessStatusCode,
+} from "./utils.js";
 
 function serializeSafely(
   program: Program,
@@ -234,7 +239,7 @@ function formatHttpRequestExampleLine(
   routePrefix?: string,
 ): string {
   let path = routePrefix
-    ? applyRoutePrefixLocal(httpOperation.uriTemplate, routePrefix)
+    ? applyRoutePrefix(httpOperation.uriTemplate, routePrefix)
     : httpOperation.uriTemplate;
   const queryEntries: string[] = [];
 
@@ -362,17 +367,4 @@ function pickPrimaryResponse(
     responses.find((response) => isSuccessStatusCode(response.statusCodes)) ??
     responses[0]
   );
-}
-
-function applyRoutePrefixLocal(
-  uriTemplate: string,
-  resolvedPrefix: string,
-): string {
-  if (!resolvedPrefix) return uriTemplate;
-  const cleanPrefix = resolvedPrefix.replace(/^\//, "").replace(/\/$/, "");
-  if (!cleanPrefix) return uriTemplate;
-  const pathPart = uriTemplate.startsWith("/")
-    ? uriTemplate
-    : `/${uriTemplate}`;
-  return `/${cleanPrefix}${pathPart}`;
 }

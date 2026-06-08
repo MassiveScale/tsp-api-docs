@@ -15,6 +15,11 @@ import {
 import { isVisible, type Visibility } from "@typespec/http";
 import { namespaceName } from "./utils.js";
 
+/** Returns the element type of an array model, checking both the indexer and the first property fallback. */
+export function arrayElementType(type: Model): Type | undefined {
+  return type.indexer?.value ?? [...type.properties.values()][0]?.type;
+}
+
 export function entityId(program: Program, entity: Type): string {
   if (entity.kind === "Operation") {
     const interfaceName = entity.interface ? `${entity.interface.name}.` : "";
@@ -53,8 +58,7 @@ export function typeReference(program: Program, type: Type): string {
         .join(" | ");
     case "Model":
       if (isArrayModelType(program, type)) {
-        const valueType =
-          type.indexer?.value ?? [...type.properties.values()][0]?.type;
+        const valueType = arrayElementType(type);
         return `${valueType ? typeReference(program, valueType) : "unknown"}[]`;
       }
       if (isRecordModelType(program, type)) {
@@ -109,8 +113,7 @@ export function makeLinkedTypeRef(
           .join(" | ");
       case "Model":
         if (isArrayModelType(program, type)) {
-          const valueType =
-            type.indexer?.value ?? [...type.properties.values()][0]?.type;
+          const valueType = arrayElementType(type);
           return `${valueType ? linkedRef(valueType) : "unknown"}[]`;
         }
         if (isRecordModelType(program, type)) {
@@ -230,8 +233,7 @@ export function jsonValueForType(
       );
     case "Model":
       if (isArrayModelType(program, type)) {
-        const itemType =
-          type.indexer?.value ?? [...type.properties.values()][0]?.type;
+        const itemType = arrayElementType(type);
         return [
           itemType
             ? jsonValueForType(program, itemType, visited, visibilityFilter)
@@ -277,22 +279,19 @@ export function jsonValueForType(
 }
 
 export function scalarPlaceholder(type: Scalar): unknown {
-  if (type.name === "string" || type.baseScalar?.name === "string") {
-    return "string";
+  let current: Scalar | undefined = type;
+  while (current) {
+    if (current.name === "string") return "string";
+    if (current.name === "boolean") return true;
+    if (
+      current.name.startsWith("int") ||
+      current.name.startsWith("uint") ||
+      current.name.startsWith("float") ||
+      current.name.startsWith("numeric")
+    ) {
+      return 0;
+    }
+    current = current.baseScalar;
   }
-
-  if (type.name === "boolean" || type.baseScalar?.name === "boolean") {
-    return true;
-  }
-
-  if (
-    type.name.startsWith("int") ||
-    type.name.startsWith("uint") ||
-    type.name.startsWith("float") ||
-    type.name.startsWith("numeric")
-  ) {
-    return 0;
-  }
-
   return type.name;
 }
