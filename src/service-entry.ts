@@ -2,6 +2,7 @@ import {
   getDoc,
   getSummary,
   isArrayModelType,
+  isErrorModel,
   isRecordModelType,
   listServices,
   walkPropertiesInherited,
@@ -21,7 +22,7 @@ import {
   collectOperations,
   collectTypes,
 } from "./collect.js";
-import { makeLinkedTypeRef } from "./type-ref.js";
+import { arrayElementType, makeLinkedTypeRef } from "./type-ref.js";
 import {
   describeSummary,
   describeNamespace,
@@ -339,27 +340,37 @@ export function operationUsesType(
   operation: Operation,
   target: Model | Enum | Union | Scalar,
 ): boolean {
-  return (
-    typeContainsTarget(
-      program,
-      operation.returnType,
-      target,
-      new Set<Type>(),
-    ) ||
-    typeContainsTarget(program, operation.parameters, target, new Set<Type>())
-  );
+  // @error types are cross-cutting error envelopes, not addressable entities.
+  if (isErrorModel(program, target)) {
+    return false;
+  }
+
+  if (typeDirectlyReferencesTarget(program, operation.returnType, target)) {
+    return true;
+  }
+
+  for (const property of walkPropertiesInherited(operation.parameters)) {
+    if (typeDirectlyReferencesTarget(program, property.type, target)) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
-function typeContainsTarget(
+// Returns true if `type` IS the target, is a direct array/record of the target,
+// or is a union whose variants directly reference the target (including as an
+// array/record element). Does not recurse into regular model properties.
+// visited guards against circular union references.
+function typeDirectlyReferencesTarget(
   program: Program,
   type: Type,
   target: Model | Enum | Union | Scalar,
-  visited: Set<Type>,
+  visited: Set<Type> = new Set(),
 ): boolean {
   if (visited.has(type)) {
     return false;
   }
-
   visited.add(type);
 
   if (type === target) {
@@ -369,23 +380,19 @@ function typeContainsTarget(
   switch (type.kind) {
     case "Model": {
       if (isArrayModelType(program, type) || isRecordModelType(program, type)) {
-        const elementType = type.indexer?.value;
-        return elementType
-          ? typeContainsTarget(program, elementType, target, visited)
-          : false;
+        const elementType = arrayElementType(type);
+        return elementType === target;
       }
-      return [...walkPropertiesInherited(type)].some((property) =>
-        typeContainsTarget(program, property.type, target, visited),
-      );
+      return false;
     }
-    case "Union":
-      return [...type.variants.values()].some((variant) =>
-        typeContainsTarget(program, variant.type, target, visited),
-      );
-    case "Tuple":
-      return type.values.some((value) =>
-        typeContainsTarget(program, value, target, visited),
-      );
+    case "Union": {
+      for (const variant of type.variants.values()) {
+        if (typeDirectlyReferencesTarget(program, variant.type, target, visited)) {
+          return true;
+        }
+      }
+      return false;
+    }
     default:
       return false;
   }

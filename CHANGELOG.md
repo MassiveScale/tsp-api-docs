@@ -9,6 +9,13 @@ This project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
+### Fixed
+
+- **Related-methods filtering is now shallow** — the emitter previously walked into nested model properties when deciding which operations to show on a type page, causing container types (e.g. `WidgetList { items: Widget[] }`) to pull unrelated operations onto the inner type's page. Methods now appear on a type page only when the operation's return type or a direct parameter type IS that type, or is a direct array/record/union of it.
+- **Union-variant arrays now matched** — `op foo(): Widget[] | null` correctly associates with `Widget`; the union branch now recurses into each variant with a cycle guard rather than using strict equality on the variant type.
+- **Array element type uses first-property fallback** — `model WidgetList extends Array<Widget> {}` (no indexer) is now correctly resolved to `Widget` via `arrayElementType()`, matching the same fallback used by the relation-diagram path.
+- **`@error` types excluded from related-methods** — types decorated with `@error` (e.g. `ErrorResponse`) are cross-cutting error envelopes returned by many operations; they are no longer treated as addressable entities and their type pages will have no Methods section.
+
 ### Changed
 
 - **Test suite split by source module** — `test/emitter.test.js` now covers only emitter-level concerns (output formats, service index, project-file options); tests for `src/service-entry.ts`, `src/operation-page.ts`, `src/type-page.ts`, `src/relation-diagram.ts`, and `src/templates.ts` live in their own matching test files. `test/output.test.js` is unchanged.
