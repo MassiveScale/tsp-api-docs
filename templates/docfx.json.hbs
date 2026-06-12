@@ -9,7 +9,10 @@
     "resource": [],
     "globalMetadata": {
       "_enableSearch": true,
-      "pdf": true
+      "_appName": {{appName}},
+      "_appTitle": {{appTitle}},
+      "pdf": {{enablePdf}},
+      "pdfTocPage": {{enablePdfTocPage}}
     },
     "template": [{{#each themes}}"{{this}}"{{#unless @last}}, {{/unless}}{{/each}}],
     "dest": "_site"

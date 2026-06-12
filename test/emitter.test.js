@@ -254,16 +254,83 @@ describe("tsp-api-docs emitter", () => {
       );
     });
 
-    it("applies docfx-theme to docfx.json template array", async () => {
+    it("applies docfx.theme to docfx.json template array", async () => {
       const result = await tester
         .emit("@massivescale/tsp-api-docs", {
           format: "docfx",
-          "docfx-theme": ["default", "my-custom-theme"],
+          docfx: { theme: ["default", "my-custom-theme"] },
         })
         .compile(widgetSource);
 
       const config = JSON.parse(result.outputs["docfx.json"]);
       assert.deepEqual(config.build.template, ["default", "my-custom-theme"]);
+    });
+
+    it("applies docfx.app-name and docfx.app-title to globalMetadata", async () => {
+      const result = await tester
+        .emit("@massivescale/tsp-api-docs", {
+          format: "docfx",
+          docfx: { "app-name": "My API", "app-title": "My API Reference" },
+        })
+        .compile(widgetSource);
+
+      const config = JSON.parse(result.outputs["docfx.json"]);
+      assert.equal(config.build.globalMetadata._appName, "My API");
+      assert.equal(config.build.globalMetadata._appTitle, "My API Reference");
+    });
+
+    it("docfx.app-name and docfx.app-title default to api-name when set", async () => {
+      const result = await tester
+        .emit("@massivescale/tsp-api-docs", {
+          format: "docfx",
+          "api-name": "Widget Service",
+        })
+        .compile(widgetSource);
+
+      const config = JSON.parse(result.outputs["docfx.json"]);
+      assert.equal(config.build.globalMetadata._appName, "Widget Service");
+      assert.equal(config.build.globalMetadata._appTitle, "Widget Service");
+    });
+
+    it("docfx.enable-pdf and docfx.enable-pdf-toc-page control globalMetadata flags", async () => {
+      const enabledResult = await tester
+        .emit("@massivescale/tsp-api-docs", {
+          format: "docfx",
+          docfx: { "enable-pdf": true, "enable-pdf-toc-page": true },
+        })
+        .compile(widgetSource);
+      const enabledConfig = JSON.parse(enabledResult.outputs["docfx.json"]);
+      assert.equal(enabledConfig.build.globalMetadata.pdf, true);
+      assert.equal(enabledConfig.build.globalMetadata.pdfTocPage, true);
+
+      const disabledResult = await tester
+        .emit("@massivescale/tsp-api-docs", {
+          format: "docfx",
+          docfx: { "enable-pdf": false, "enable-pdf-toc-page": false },
+        })
+        .compile(widgetSource);
+      const disabledConfig = JSON.parse(disabledResult.outputs["docfx.json"]);
+      assert.equal(disabledConfig.build.globalMetadata.pdf, false);
+      assert.equal(disabledConfig.build.globalMetadata.pdfTocPage, false);
+    });
+
+    it("docfx.emit-json suppresses docfx.json independently of emit-project-files", async () => {
+      const result = await tester
+        .emit("@massivescale/tsp-api-docs", {
+          format: "docfx",
+          docfx: { "emit-json": false },
+        })
+        .compile(widgetSource);
+
+      assert.equal(
+        result.outputs["docfx.json"],
+        undefined,
+        "docfx.json should be suppressed when docfx.emit-json is false",
+      );
+      assert.ok(
+        result.outputs["widget-api/index.md"] !== undefined,
+        "documentation pages should still be emitted",
+      );
     });
 
     it("does not emit docfx.json for non-docfx formats", async () => {

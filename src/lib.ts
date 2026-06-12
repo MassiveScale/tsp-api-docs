@@ -29,6 +29,49 @@ export type TemplateName =
 export type TemplateOverrides = Partial<Record<TemplateName, string>>;
 
 /**
+ * DocFx-specific options nested under the `docfx:` key in `tspconfig.yaml`.
+ * These options are only meaningful when `format` is `"docfx"`.
+ */
+export interface DocFxOptions {
+  /**
+   * Application name displayed in the DocFx site header (`_appName` in
+   * `globalMetadata`). Defaults to `api-name` when set, otherwise `"API"`.
+   */
+  "app-name"?: string;
+
+  /**
+   * Application title used in the DocFx site's `<title>` tag (`_appTitle` in
+   * `globalMetadata`). Defaults to `api-name` when set, otherwise `"API"`.
+   */
+  "app-title"?: string;
+
+  /**
+   * When `true` (default), the emitter generates a `docfx.json` project file.
+   * Use this as a finer-grained override when `emit-project-files` is `true`
+   * but you want to suppress only the `docfx.json` specifically.
+   */
+  "emit-json"?: boolean;
+
+  /**
+   * When `true` (default), sets `globalMetadata.pdf: true` in the generated
+   * `docfx.json`, enabling PDF generation in the DocFx build.
+   */
+  "enable-pdf"?: boolean;
+
+  /**
+   * When `true` (default), sets `globalMetadata.pdfTocPage: true` in the
+   * generated `docfx.json`, enabling a PDF table-of-contents page.
+   */
+  "enable-pdf-toc-page"?: boolean;
+
+  /**
+   * DocFx template names applied to the `build.template` array in the
+   * generated `docfx.json`. Defaults to `["default", "modern"]`.
+   */
+  theme?: string[];
+}
+
+/**
  * All configuration options exposed by the emitter in `tspconfig.yaml`.
  * Every field is optional; the emitter applies documented defaults when a
  * field is absent.
@@ -50,11 +93,10 @@ export interface ApiDocsEmitterOptions {
   "clean-output-dir"?: boolean;
 
   /**
-   * DocFx template names applied to the `build.template` array in the
-   * generated `docfx.json`. Defaults to `["default", "modern"]`.
-   * Only meaningful when `format` is `"docfx"`.
+   * DocFx-specific options. Only meaningful when `format` is `"docfx"`.
+   * See {@link DocFxOptions} for available sub-keys.
    */
-  "docfx-theme"?: string[];
+  docfx?: DocFxOptions;
 
   /**
    * When `true` (default), the emitter writes project/configuration files
@@ -129,10 +171,19 @@ const optionsSchema = {
       type: "boolean",
       nullable: true,
     },
-    "docfx-theme": {
-      type: "array",
-      items: { type: "string" },
+    docfx: {
+      type: "object",
+      additionalProperties: false,
       nullable: true,
+      properties: {
+        "app-name": { type: "string", nullable: true },
+        "app-title": { type: "string", nullable: true },
+        "emit-json": { type: "boolean", nullable: true },
+        "enable-pdf": { type: "boolean", nullable: true },
+        "enable-pdf-toc-page": { type: "boolean", nullable: true },
+        theme: { type: "array", items: { type: "string" }, nullable: true },
+      },
+      required: [],
     },
     "emit-project-files": {
       type: "boolean",

@@ -143,7 +143,13 @@ export async function $onEmit(context: EmitContext<ApiDocsEmitterOptions>) {
   const emitProjectFiles = context.options["emit-project-files"] ?? true;
   const overwriteProjectFiles =
     context.options["overwrite-project-files"] ?? false;
-  const docfxThemes = context.options["docfx-theme"] ?? ["default", "modern"];
+  const docfx = context.options.docfx;
+  const docfxThemes = docfx?.theme ?? ["default", "modern"];
+  const docfxAppName = docfx?.["app-name"] ?? apiName ?? "API";
+  const docfxAppTitle = docfx?.["app-title"] ?? apiName ?? "API";
+  const docfxEnablePdf = docfx?.["enable-pdf"] ?? true;
+  const docfxEnablePdfTocPage = docfx?.["enable-pdf-toc-page"] ?? true;
+  const docfxEmitJson = docfx?.["emit-json"] ?? true;
   const emitRelationDiagram = context.options["emit-relation-diagram"] ?? false;
 
   const templateOverrides = resolveTemplateOverrides(
@@ -192,9 +198,13 @@ export async function $onEmit(context: EmitContext<ApiDocsEmitterOptions>) {
   const markdownTypesIndex = compileTemplate<TypesIndexModel>(
     templates.typesIndex,
   );
-  const renderDocFxProject = compileTemplate<{ themes: string[] }>(
-    templates.docfxProject,
-  );
+  const renderDocFxProject = compileTemplate<{
+    themes: string[];
+    appName: string;
+    appTitle: string;
+    enablePdf: boolean;
+    enablePdfTocPage: boolean;
+  }>(templates.docfxProject);
 
   /** Renders the root service index and prettifies the resulting Markdown. */
   function renderServiceIndex(model: ServiceIndexModel): string {
@@ -294,23 +304,28 @@ export async function $onEmit(context: EmitContext<ApiDocsEmitterOptions>) {
     });
 
     if (format === "docfx") {
-      const allServiceLinks = [
-        ...nonVersionedServices,
-        ...versionedServices.flatMap((g) => g.versions),
-      ];
       await emitFile(program, {
         path: resolvePath(context.emitterOutputDir, "toc.yml"),
-        content: buildDocFxRootTocContent(allServiceLinks),
+        content: buildDocFxRootTocContent(
+          nonVersionedServices,
+          versionedServices,
+        ),
       });
     }
   }
 
-  if (format === "docfx" && emitProjectFiles) {
+  if (format === "docfx" && emitProjectFiles && docfxEmitJson) {
     const docfxJsonPath = resolvePath(context.emitterOutputDir, "docfx.json");
     if (overwriteProjectFiles || !existsSync(docfxJsonPath)) {
       await emitFile(program, {
         path: docfxJsonPath,
-        content: renderDocFxProject({ themes: docfxThemes }),
+        content: renderDocFxProject({
+          themes: docfxThemes,
+          appName: JSON.stringify(docfxAppName),
+          appTitle: JSON.stringify(docfxAppTitle),
+          enablePdf: docfxEnablePdf,
+          enablePdfTocPage: docfxEnablePdfTocPage,
+        }),
       });
     }
   }

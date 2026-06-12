@@ -171,6 +171,55 @@ describe("service entry", () => {
     );
   });
 
+  it("groups versioned services under a Versions section in the docfx root toc.yml", async () => {
+    const result = await versionedTester.emit("@massivescale/tsp-api-docs", {
+      format: "docfx",
+      "render-service-index": true,
+    }).compile(`
+      using Http;
+      using Versioning;
+
+      @versioned(Versions)
+      @service(#{ title: "Widget API" })
+      namespace Demo;
+
+      enum Versions {
+        v1_0: "1.0",
+        v2_0: "2.0",
+      }
+
+      model Widget {
+        id: string;
+      }
+
+      @route("/widgets")
+      interface Widgets {
+        @get list(): Widget;
+      }
+    `);
+
+    const toc = result.outputs["toc.yml"];
+    assert.ok(toc !== undefined, "root toc.yml should be emitted");
+    assert.ok(
+      toc.includes("- name: Versions"),
+      "toc.yml should have a Versions group",
+    );
+    assert.ok(
+      toc.includes('"Widget API"'),
+      "toc.yml should include the service name",
+    );
+    assert.ok(toc.includes('"1.0"'), "toc.yml should list version 1.0");
+    assert.ok(toc.includes('"2.0"'), "toc.yml should list version 2.0");
+    assert.ok(
+      toc.includes("href: 1-0/index.md"),
+      "toc.yml should link to version 1.0 overview",
+    );
+    assert.ok(
+      toc.includes("href: 2-0/index.md"),
+      "toc.yml should link to version 2.0 overview",
+    );
+  });
+
   describe("api-name option", () => {
     it("uses api-name as the slug for a non-versioned service", async () => {
       const result = await tester
