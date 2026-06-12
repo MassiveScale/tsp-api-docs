@@ -168,7 +168,7 @@ tsp-output/
 
 ### DocFx Project Files
 
-When `format: docfx` is used, the emitter writes a `docfx.json` configuration file at the output root. This file is only written if it does not already exist (controlled by `overwrite-project-files`). To skip it entirely, set `emit-project-files: false` or `docfx-emit-json: false`.
+When `format: docfx` is used, the emitter writes a `docfx.json` configuration file at the output root. This file is only written if it does not already exist (controlled by `overwrite-project-files`). To skip it entirely, set `emit-project-files: false` or `docfx: { emit-json: false }`.
 
 The following options populate fields in the generated `docfx.json`:
 
