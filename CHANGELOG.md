@@ -10,4 +10,5 @@ This project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [v1.0.0-beta1] — Initial Release
 
 ### Added
+
 - Initial Release

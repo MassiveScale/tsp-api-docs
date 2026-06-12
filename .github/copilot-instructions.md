@@ -6,26 +6,26 @@
 
 ## Repository Layout
 
-| Path                       | Purpose                                                        |
-| -------------------------- | -------------------------------------------------------------- |
-| `src/emitter.ts`           | `$onEmit` entry point — orchestrates the full emit pipeline    |
-| `src/lib.ts`               | Emitter option schema (`ApiDocsEmitterOptions`) and `$lib`     |
-| `src/collect.ts`           | Namespace/operation/type walkers with deduplication            |
-| `src/service-entry.ts`     | Assembles per-service page models and related-method index     |
-| `src/operation-page.ts`    | Builds `OperationPageModel` for each operation page            |
-| `src/type-page.ts`         | Builds `TypePageModel` for each type page                      |
-| `src/type-ref.ts`          | Type-to-string helpers and Markdown-linked type references     |
-| `src/output.ts`            | Index/TOC builders and output directory clean logic            |
-| `src/operation-examples.ts`| HTTP example generation (from `@opExample` or synthetic)       |
-| `src/relation-diagram.ts`  | Mermaid ER diagram builder                                     |
-| `src/templates.ts`         | Handlebars template loader with override support               |
-| `src/utils.ts`             | Shared formatting, slug, breadcrumb, and status-code helpers   |
-| `src/index.ts`             | Public re-exports (`$onEmit`, `$lib`)                          |
-| `src/testing/index.ts`     | `TspApiDocsTestLibrary` for use in consumer test harnesses     |
-| `templates/`               | External `.hbs` templates (one per page type)                  |
-| `test/`                    | Node built-in test files (`*.test.js`)                         |
-| `examples/`                | Example TypeSpec projects for manual validation                |
-| `dist/src/`                | Compiled output — what npm consumers receive                   |
+| Path                        | Purpose                                                      |
+| --------------------------- | ------------------------------------------------------------ |
+| `src/emitter.ts`            | `$onEmit` entry point — orchestrates the full emit pipeline  |
+| `src/lib.ts`                | Emitter option schema (`ApiDocsEmitterOptions`) and `$lib`   |
+| `src/collect.ts`            | Namespace/operation/type walkers with deduplication          |
+| `src/service-entry.ts`      | Assembles per-service page models and related-method index   |
+| `src/operation-page.ts`     | Builds `OperationPageModel` for each operation page          |
+| `src/type-page.ts`          | Builds `TypePageModel` for each type page                    |
+| `src/type-ref.ts`           | Type-to-string helpers and Markdown-linked type references   |
+| `src/output.ts`             | Index/TOC builders and output directory clean logic          |
+| `src/operation-examples.ts` | HTTP example generation (from `@opExample` or synthetic)     |
+| `src/relation-diagram.ts`   | Mermaid ER diagram builder                                   |
+| `src/templates.ts`          | Handlebars template loader with override support             |
+| `src/utils.ts`              | Shared formatting, slug, breadcrumb, and status-code helpers |
+| `src/index.ts`              | Public re-exports (`$onEmit`, `$lib`)                        |
+| `src/testing/index.ts`      | `TspApiDocsTestLibrary` for use in consumer test harnesses   |
+| `templates/`                | External `.hbs` templates (one per page type)                |
+| `test/`                     | Node built-in test files (`*.test.js`)                       |
+| `examples/`                 | Example TypeSpec projects for manual validation              |
+| `dist/src/`                 | Compiled output — what npm consumers receive                 |
 
 ## Technical Conventions
 
