@@ -43,6 +43,14 @@ jobs:
           fi
 
       - name: Publish
-        run: npm publish --access public --provenance
+        run: |
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          if [[ "$PKG_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+-.*$ ]]; then
+            echo "Publishing prerelease version $PKG_VERSION with --tag beta"
+            npm publish --access public --provenance --tag beta
+          else
+            echo "Publishing stable version $PKG_VERSION"
+            npm publish --access public --provenance
+          fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
