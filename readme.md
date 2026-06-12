@@ -58,20 +58,58 @@ options:
 
 ### Options
 
-| Option                    | Type                                        | Default          | Description                                                                                                                                                                                                                                                                                                                          |
-| ------------------------- | ------------------------------------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `api-name`                | `string`                                    | —                | API name prefix for file/folder slugs. See [API Name](#api-name) below.                                                                                                                                                                                                                                                              |
-| `clean-output-dir`        | `boolean`                                   | `true`           | Before emitting, deletes the entire `emitter-output-dir` for `azure-devops` and `github` formats. For `docfx`, enumerates and removes only non-project files, preserving `docfx.json`. Do not point `emitter-output-dir` at a directory that contains unrelated files when this is `true`. Set to `false` to skip cleaning entirely. |
-| `docfx-theme`             | `string[]`                                  | `["default"]`    | DocFx template names applied to the `build.template` array in the generated `docfx.json`. Only used with `format: docfx`.                                                                                                                                                                                                            |
-| `emit-project-files`      | `boolean`                                   | `true`           | When `true`, emits project/configuration files (e.g. `docfx.json`). Set to `false` to emit documentation files only.                                                                                                                                                                                                                 |
-| `emit-relation-diagram`   | `boolean`                                   | `false`          | When `true`, emits a `relation-diagram.md` containing a Mermaid ER diagram of all types for each service.                                                                                                                                                                                                                            |
-| `emitter-output-dir`      | `string`                                    | `./tsp-output`   | Output directory for generated files.                                                                                                                                                                                                                                                                                                |
-| `format`                  | `"azure-devops"` \| `"github"` \| `"docfx"` | `"azure-devops"` | Output format. See [Output Formats](#output-formats) below.                                                                                                                                                                                                                                                                          |
-| `overwrite-project-files` | `boolean`                                   | `false`          | When `false`, project files are only written if they do not already exist. Set to `true` to always overwrite them.                                                                                                                                                                                                                   |
-| `page-title-prefix`       | `string`                                    | —                | Fallback title prefix used when the service has no explicit title.                                                                                                                                                                                                                                                                   |
-| `render-service-index`    | `boolean`                                   | `false`          | Emit a root index page listing all services.                                                                                                                                                                                                                                                                                         |
-| `route-prefix`            | `string`                                    | `api/{version}`  | Prefix prepended to HTTP request paths. Supports `{version}` token substitution. See [Route Prefix](#route-prefix) below.                                                                                                                                                                                                            |
-| `templates`               | `TemplateOverrides`                         | —                | Per-template path overrides for custom Handlebars templates. See [Custom Templates](#custom-templates) below.                                                                                                                                                                                                                        |
+All options are set under the `"@massivescale/tsp-api-docs"` key in `tspconfig.yaml`:
+
+```yaml
+options:
+  "@massivescale/tsp-api-docs":
+    format: azure-devops
+    api-name: "My API"
+    route-prefix: "api/{version}"
+```
+
+#### General options
+
+| Option                  | Type                                        | Default          | Description                                                                                                                                                                                                                                                                                                                          |
+| ----------------------- | ------------------------------------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `api-name`              | `string`                                    | —                | API name prefix for file/folder slugs. See [API Name](#api-name) below.                                                                                                                                                                                                                                                              |
+| `clean-output-dir`      | `boolean`                                   | `true`           | Before emitting, deletes the entire `emitter-output-dir` for `azure-devops` and `github` formats. For `docfx`, enumerates and removes only non-project files, preserving `docfx.json`. Do not point `emitter-output-dir` at a directory that contains unrelated files when this is `true`. Set to `false` to skip cleaning entirely. |
+| `emit-project-files`    | `boolean`                                   | `true`           | When `true`, emits project/configuration files (e.g. `docfx.json`). Set to `false` to emit documentation files only.                                                                                                                                                                                                                 |
+| `emit-relation-diagram` | `boolean`                                   | `false`          | When `true`, emits a `relation-diagram.md` containing a Mermaid ER diagram of all types for each service.                                                                                                                                                                                                                            |
+| `emitter-output-dir`    | `string`                                    | `./tsp-output`   | Output directory for generated files.                                                                                                                                                                                                                                                                                                |
+| `format`                | `"azure-devops"` \| `"github"` \| `"docfx"` | `"azure-devops"` | Output format. See [Output Formats](#output-formats) below.                                                                                                                                                                                                                                                                          |
+| `overwrite-project-files` | `boolean`                                 | `false`          | When `false`, project files are only written if they do not already exist. Set to `true` to always overwrite them.                                                                                                                                                                                                                   |
+| `page-title-prefix`     | `string`                                    | —                | Fallback title prefix used when the service has no explicit title.                                                                                                                                                                                                                                                                   |
+| `render-service-index`  | `boolean`                                   | `false`          | Emit a root index page listing all services.                                                                                                                                                                                                                                                                                         |
+| `route-prefix`          | `string`                                    | `api/{version}`  | Prefix prepended to HTTP request paths. Supports `{version}` token substitution. See [Route Prefix](#route-prefix) below.                                                                                                                                                                                                            |
+| `templates`             | `TemplateOverrides`                         | —                | Per-template path overrides for custom Handlebars templates. See [Custom Templates](#custom-templates) below.                                                                                                                                                                                                                        |
+
+#### DocFx options
+
+DocFx-specific options are nested under a `docfx:` key, which itself lives under `"@massivescale/tsp-api-docs"`. These are only applied when `format: docfx`.
+
+```yaml
+options:
+  "@massivescale/tsp-api-docs":
+    format: docfx
+    docfx:
+      app-name: "My API"
+      app-title: "My API Reference"
+      enable-pdf: true
+      enable-pdf-toc-page: true
+      theme:
+        - default
+        - modern
+```
+
+| Option              | Type       | Default               | Description                                                                                       |
+| ------------------- | ---------- | --------------------- | ------------------------------------------------------------------------------------------------- |
+| `app-name`          | `string`   | `api-name` or `"API"` | Application name in the site header. Sets `globalMetadata._appName` in `docfx.json`.             |
+| `app-title`         | `string`   | `api-name` or `"API"` | Application title in the browser `<title>` tag. Sets `globalMetadata._appTitle` in `docfx.json`. |
+| `emit-json`         | `boolean`  | `true`                | When `false`, suppresses `docfx.json` output while leaving documentation pages unaffected.        |
+| `enable-pdf`        | `boolean`  | `true`                | Sets `globalMetadata.pdf` in `docfx.json`, enabling PDF generation in the DocFx build.            |
+| `enable-pdf-toc-page` | `boolean` | `true`               | Sets `globalMetadata.pdfTocPage` in `docfx.json`, enabling a PDF table-of-contents page.          |
+| `theme`             | `string[]` | `["default", "modern"]` | Template names applied to the `build.template` array in `docfx.json`.                          |
 
 ## Output Formats
 
@@ -130,17 +168,22 @@ tsp-output/
 
 ### DocFx Project Files
 
-When `format: docfx` is used, the emitter writes a `docfx.json` configuration file at the output root. This file is only written if it does not already exist (controlled by `overwrite-project-files`). To skip it entirely, set `emit-project-files: false`.
+When `format: docfx` is used, the emitter writes a `docfx.json` configuration file at the output root. This file is only written if it does not already exist (controlled by `overwrite-project-files`). To skip it entirely, set `emit-project-files: false` or `docfx-emit-json: false`.
 
-The `docfx-theme` option populates the `build.template` array in the generated config:
+The following options populate fields in the generated `docfx.json`:
 
 ```yaml
 options:
   "@massivescale/tsp-api-docs":
     format: docfx
-    docfx-theme:
-      - default
-      - my-custom-theme
+    docfx:
+      app-name: "My API"          # globalMetadata._appName
+      app-title: "My API Docs"    # globalMetadata._appTitle
+      enable-pdf: true            # globalMetadata.pdf
+      enable-pdf-toc-page: true   # globalMetadata.pdfTocPage
+      theme:
+        - default
+        - my-custom-theme
 ```
 
 ### Relation Diagram

@@ -233,20 +233,46 @@ export function buildDocFxServiceTocContent(
 }
 
 /**
- * Builds the YAML content of the root `toc.yml` for a DocFx site that lists
- * multiple services.
+ * Builds the YAML content of the root `toc.yml` for a DocFx site.
  *
- * @param services - An array of service link entries (title + path).
+ * Non-versioned services are listed directly in the TOC.
+ * Versioned services are grouped by base name under a "Versions" entry,
+ * with each version listed using only the version number as the display name.
+ *
+ * @param nonVersionedServices - Non-versioned service entries to render as a flat list.
+ * @param versionedServices - Versioned services grouped by base name and version.
  * @returns The complete root `toc.yml` file content as a string.
  */
 export function buildDocFxRootTocContent(
-  services: Array<{ title: string; path: string }>,
+  nonVersionedServices: Array<{ title: string; path: string }>,
+  versionedServices: Array<{
+    name: string;
+    versions: Array<{ title: string; path: string; version: string }>;
+  }>,
 ): string {
   const lines: string[] = [];
-  for (const service of services) {
+
+  // Add non-versioned services first
+  for (const service of nonVersionedServices) {
     lines.push(`- name: ${yamlString(service.title)}`);
     lines.push(`  href: ${service.path}`);
   }
+
+  // Add versioned services grouped under "Versions" if there are any
+  if (versionedServices.length > 0) {
+    lines.push(`- name: Versions`);
+    lines.push(`  items:`);
+
+    for (const group of versionedServices) {
+      lines.push(`  - name: ${yamlString(group.name)}`);
+      lines.push(`    items:`);
+      for (const version of group.versions) {
+        lines.push(`    - name: ${yamlString(version.version)}`);
+        lines.push(`      href: ${version.path}`);
+      }
+    }
+  }
+
   return lines.join("\n") + "\n";
 }
 
