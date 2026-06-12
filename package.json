@@ -17,7 +17,7 @@
   "files": [
     "dist/src/",
     "templates/",
-    "README.md",
+    "readme.md",
     "CHANGELOG.md",
     "LICENSE"
   ],
