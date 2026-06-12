@@ -36,49 +36,104 @@ import {
 import { buildOperationPage } from "./operation-page.js";
 import { buildTypePage } from "./type-page.js";
 
+/**
+ * A minimal record for a page that can be linked to from index pages.
+ * Carries the data needed to render a table row (title, summary, path).
+ */
 export interface RenderedDoc {
+  /** Relative file path to this page (e.g. `"resources/Widget.md"`). */
   path: string;
+  /** Human-readable page title. */
   title: string;
+  /** Raw summary from `@summary` or `@doc`, if present. */
   summary?: string;
+  /** Summary falling back to {@link FALLBACK_SUMMARY} when absent. */
   summaryOrFallback: string;
 }
 
+/**
+ * A {@link RenderedDoc} extended with the namespace's display name.
+ * Used in the overview page's namespace table.
+ */
 export interface NamespaceSummary extends RenderedDoc {
+  /** Fully-qualified namespace name, e.g. `"Contoso.Pets"`. */
   name: string;
 }
 
+/**
+ * A {@link RenderedDoc} extended with operation-specific metadata.
+ * Used in the overview page and in the related-methods table on type pages.
+ */
 export interface OperationSummary extends RenderedDoc {
+  /** Operation name as declared in the TypeSpec source. */
   name: string;
+  /** Label of the containing interface or `"Service"`. */
   containerLabel: string;
+  /** Markdown type reference string for the return type. */
   returnType: string;
 }
 
+/**
+ * A {@link RenderedDoc} extended with the TypeSpec kind of the type.
+ * Used in the overview page's types table.
+ */
 export interface TypeSummary extends RenderedDoc {
+  /** Type name as declared in the TypeSpec source. */
   name: string;
+  /** TypeSpec kind string: `"Model"`, `"Enum"`, `"Union"`, or `"Scalar"`. */
   kind: string;
 }
 
+/**
+ * The data model for the service overview page template (`overview.md.hbs`).
+ * Aggregates all operations, types, and namespaces for a single service version.
+ */
 export interface OverviewPageModel {
+  /** Service title used as the page heading. */
   title: string;
+  /** Raw summary from `@summary` or `@doc` on the service namespace, if present. */
   summary?: string;
+  /** Version label string (e.g. `"v1.0"`), only present for versioned services. */
   versionLabel?: string;
+  /** Resolved API name from emitter options, if set. */
   apiName?: string;
+  /** Reserved for future use (service name distinct from title). */
   serviceName?: string;
+  /** All descendant namespaces of the service namespace. */
   namespaces: NamespaceSummary[];
+  /** All operations in the service, sorted alphabetically by name. */
   operations: OperationSummary[];
+  /** All named types in the service, sorted alphabetically by name. */
   types: TypeSummary[];
 }
 
+/**
+ * A fully-resolved service entry containing all page models needed to emit
+ * a complete documentation set for one service (or one version of a service).
+ */
 export interface ServiceEntry {
+  /** URL-safe slug for this service (used as the output folder name). */
   slug: string;
+  /**
+   * The unversioned base label used to group versioned services together.
+   * Equal to `apiName` when set, otherwise the service title.
+   */
   baseLabel: string;
+  /** Version string (e.g. `"v1.0"`), only present for versioned services. */
   versionValue?: string;
+  /** Data model for the overview page. */
   overview: OverviewPageModel;
+  /** One entry per operation, each holding the slug and full page model. */
   operations: Array<{
     slug: string;
     page: import("./operation-page.js").OperationPageModel;
   }>;
+  /** One entry per type, each holding the slug and full page model. */
   types: Array<{ slug: string; page: import("./type-page.js").TypePageModel }>;
+  /**
+   * The raw type descriptors (id, name, type object) used by
+   * {@link buildRelationDiagram} to build the ER diagram without re-walking types.
+   */
   rawTypes: Array<{
     id: string;
     name: string;
@@ -86,6 +141,20 @@ export interface ServiceEntry {
   }>;
 }
 
+/**
+ * The top-level entry point for collecting all service entries from a TypeSpec program.
+ *
+ * Finds all `@service`-decorated namespaces. When none are present, falls back
+ * to the global namespace. For each namespace, calls
+ * {@link collectServiceEntriesForNamespace} which expands versioned services
+ * into one entry per version snapshot.
+ *
+ * @param program - The TypeSpec program.
+ * @param pageTitlePrefix - Fallback prefix for page titles when no `@service` title is present.
+ * @param apiName - Optional API name override from emitter options.
+ * @param routePrefix - Optional route prefix template (may contain `{version}`).
+ * @returns A flat array of {@link ServiceEntry} objects, one per service (or version).
+ */
 export function getServiceEntries(
   program: Program,
   pageTitlePrefix?: string,
@@ -113,6 +182,22 @@ export function getServiceEntries(
   );
 }
 
+/**
+ * Expands a single service namespace into one or more {@link ServiceEntry} objects.
+ *
+ * When the namespace is decorated with `@versioned`, the TypeSpec versioning
+ * mutator API is used to project a snapshot of the namespace for each declared
+ * version. Each snapshot is then passed to {@link collectServiceEntry}.
+ *
+ * Non-versioned services produce exactly one entry.
+ *
+ * @param program - The TypeSpec program.
+ * @param serviceNamespace - The `@service`-decorated namespace.
+ * @param serviceTitle - The service title from the `@service` decorator, if any.
+ * @param pageTitlePrefix - Fallback title prefix from emitter options.
+ * @param apiName - Optional API name override.
+ * @param routePrefix - Optional route prefix template.
+ */
 export function collectServiceEntriesForNamespace(
   program: Program,
   serviceNamespace: Namespace,
@@ -125,6 +210,7 @@ export function collectServiceEntriesForNamespace(
 
   if (versioning?.kind === "versioned") {
     return versioning.snapshots.map((snapshot) => {
+      // Materialize a version-specific copy of the namespace subgraph.
       const { type } = unsafe_mutateSubgraphWithNamespace(
         program,
         [snapshot.mutator],
@@ -155,6 +241,21 @@ export function collectServiceEntriesForNamespace(
   ];
 }
 
+/**
+ * Builds a single {@link ServiceEntry} for a namespace (or a versioned snapshot).
+ *
+ * This is the central assembly function: it collects all operations and types,
+ * sorts them, builds cross-reference maps, computes related-method lists for
+ * type pages, and assembles the full data models for every page in the service.
+ *
+ * @param program - The TypeSpec program.
+ * @param serviceNamespace - The namespace to document (possibly a version snapshot).
+ * @param serviceTitle - Title from `@service`, used as the heading.
+ * @param pageTitlePrefix - Fallback title when no `@service` title is present.
+ * @param apiName - Optional API name override from emitter options.
+ * @param version - The version object from `@typespec/versioning`, when versioned.
+ * @param routePrefix - Optional route prefix template.
+ */
 export function collectServiceEntry(
   program: Program,
   serviceNamespace: Namespace,
@@ -288,6 +389,25 @@ export function collectServiceEntry(
   };
 }
 
+/**
+ * Builds a map from type ID to the list of operations that reference that type.
+ *
+ * For each type in `types`, all operations in `operations` are tested with
+ * {@link operationUsesType}. Matching operations are converted to
+ * {@link OperationSummary} objects with relative paths adjusted for type pages
+ * (which live inside `resources/`, so links to `api/` need a `"../"` prefix).
+ *
+ * `@error` types are excluded from all related-method lists because they are
+ * cross-cutting error envelopes used across many operations — listing them on
+ * every operation page would be noisy and unhelpful.
+ *
+ * @param program - The TypeSpec program.
+ * @param types - All named types in the service, sorted by name.
+ * @param operations - All operations in the service, sorted by name.
+ * @param operationPathById - Map from operation entity ID to its relative file path.
+ * @param typePathById - Map from type entity ID to its relative file path.
+ * @returns A map from type entity ID to its list of related operation summaries.
+ */
 export function buildRelatedMethodsByType(
   program: Program,
   types: Array<{
@@ -335,6 +455,24 @@ export function buildRelatedMethodsByType(
   return relatedMethods;
 }
 
+/**
+ * Returns `true` when an operation uses `target` as a parameter or return type.
+ *
+ * "Uses" is defined as:
+ * 1. The return type directly references `target` (via {@link typeDirectlyReferencesTarget}).
+ * 2. Any parameter property directly references `target`.
+ * 3. Any parameter is a plain (non-array, non-record) model whose own properties
+ *    directly reference `target` — this handles wrapper body patterns such as
+ *    `op create(body: CreateWidgetRequest): Widget` where `CreateWidgetRequest`
+ *    has `widget: Widget`.
+ *
+ * `@error` types are always excluded: they appear on every operation that can
+ * fail and listing them on a type page would be misleading.
+ *
+ * @param program - The TypeSpec program.
+ * @param operation - The operation to test.
+ * @param target - The type to look for.
+ */
 export function operationUsesType(
   program: Program,
   operation: Operation,
@@ -352,6 +490,21 @@ export function operationUsesType(
   for (const property of walkPropertiesInherited(operation.parameters)) {
     if (typeDirectlyReferencesTarget(program, property.type, target)) {
       return true;
+    }
+    // For plain model parameters (e.g. an @body wrapper like CreateRequest),
+    // also check their direct properties — a wrapper body type is still a
+    // direct input to the operation from the caller's perspective.
+    const paramType = property.type;
+    if (
+      paramType.kind === "Model" &&
+      !isArrayModelType(program, paramType) &&
+      !isRecordModelType(program, paramType)
+    ) {
+      for (const nested of walkPropertiesInherited(paramType)) {
+        if (typeDirectlyReferencesTarget(program, nested.type, target)) {
+          return true;
+        }
+      }
     }
   }
 
@@ -400,6 +553,14 @@ function typeDirectlyReferencesTarget(
   }
 }
 
+/**
+ * Resolves the route prefix template by substituting `{version}` and
+ * normalizing repeated or trailing slashes.
+ *
+ * @param routePrefix - The raw prefix template, e.g. `"api/{version}"`.
+ * @param version - The version string to substitute for `{version}`, if any.
+ * @returns A clean prefix string with no trailing slash.
+ */
 function resolveRoutePrefixInternal(
   routePrefix: string,
   version?: string,

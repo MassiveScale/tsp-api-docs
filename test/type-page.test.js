@@ -59,6 +59,32 @@ describe("type page", () => {
     assert.ok(!widgetPage.includes("[list](../api/Widgets-List.md)"));
   });
 
+  it("shows related methods for operations that accept the type through a wrapper parameter model", async () => {
+    const result = await tester.emit("@massivescale/tsp-api-docs").compile(`
+      @service(#{ title: "Wrapper Body API" })
+      namespace Demo;
+
+      model Widget {
+        id: string;
+      }
+
+      model CreateWidgetRequest {
+        widget: Widget;
+      }
+
+      interface Widgets {
+        op create(body: CreateWidgetRequest): Widget;
+        op read(id: string): Widget;
+      }
+    `);
+
+    const widgetPage = result.outputs["wrapper-body-api/resources/Widget.md"];
+    // read() directly returns Widget — must appear.
+    assert.ok(widgetPage.includes("[read](../api/Widgets-Read.md)"));
+    // create() accepts Widget inside a wrapper model — must also appear.
+    assert.ok(widgetPage.includes("[create](../api/Widgets-Create.md)"));
+  });
+
   it("does not show related methods on @error-decorated types", async () => {
     const result = await tester.emit("@massivescale/tsp-api-docs").compile(`
       @service(#{ title: "Error Test API" })
