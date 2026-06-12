@@ -19,7 +19,7 @@ This project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- **Breaking**: DocFx-specific options are now nested under a `docfx:` key in `tspconfig.yaml` (e.g. `docfx: { app-name: "..." }`) rather than being flat top-level keys with a `docfx-` prefix. Rename existing `docfx-app-name` → `docfx.app-name`, `docfx-theme` → `docfx.theme`, etc.
+- **Breaking**: DocFx-specific options are now nested under a `docfx:` key in `tspconfig.yaml` (e.g. `docfx: { theme: ["default", "modern"] }`) rather than being flat top-level keys with a `docfx-` prefix. Rename existing `docfx-theme` → `docfx.theme` (i.e. `docfx: { theme: [...] }`), etc.
 - DocFx root `toc.yml` now groups versioned services under a nested `Versions` section rather than listing them as a flat list
 - `docfx.json` template expanded: `globalMetadata` now includes `_appName`, `_appTitle`, and `pdfTocPage`
 
