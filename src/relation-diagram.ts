@@ -9,11 +9,34 @@ import type { OutputFormat } from "./lib.js";
 import type { ServiceEntry } from "./service-entry.js";
 import { arrayElementType } from "./type-ref.js";
 
+/**
+ * Describes a resolved ER-diagram relationship target — the type at the other
+ * end of a property reference, along with whether the relationship is one-to-many.
+ */
 interface ErRelationTarget {
+  /** Name of the related type as it appears in the diagram. */
   typeName: string;
+  /** `true` when the property holds a collection (array) of the related type. */
   isArray: boolean;
 }
 
+/**
+ * Builds the full content of a `relation-diagram.md` file for a service.
+ *
+ * The diagram is a Mermaid `erDiagram` block containing one entity per named
+ * type in the service, with attribute rows for each property, and relationship
+ * lines between types that reference one another. Only relationships between
+ * types known to the service (i.e. in `service.rawTypes`) are emitted.
+ *
+ * The Mermaid fence syntax differs by format:
+ * - `azure-devops` uses `:::mermaid … :::` (ADO Wiki syntax).
+ * - All other formats use the standard ` ```mermaid … ``` ` fence.
+ *
+ * @param program - The TypeSpec program.
+ * @param service - The service entry whose types to diagram.
+ * @param format - The output format, used to choose the Mermaid fence style.
+ * @returns The full Markdown file content as a string.
+ */
 export function buildRelationDiagram(
   program: Program,
   service: ServiceEntry,
@@ -22,6 +45,8 @@ export function buildRelationDiagram(
   const knownTypeNames = new Set(service.rawTypes.map((t) => t.name));
   const entities: string[] = [];
   const relationships: string[] = [];
+  // Deduplicate relationships: a given (parent, child, propertyName) triple
+  // can only appear once even if walkPropertiesInherited surfaces it multiple times.
   const seenRelationships = new Set<string>();
 
   for (const { name, type } of service.rawTypes) {
@@ -91,6 +116,17 @@ export function buildRelationDiagram(
   ].join("\n");
 }
 
+/**
+ * Resolves the ER-diagram relationship target for a property type, if any.
+ *
+ * Returns a target only when the type (or its element type for arrays) is a
+ * named type that exists in the service's known type set. Returns `undefined`
+ * for primitives, anonymous models, record types, and types outside the service.
+ *
+ * @param program - The TypeSpec program.
+ * @param type - The property type to inspect.
+ * @param knownTypeNames - Set of named types that have their own diagram entity.
+ */
 function resolveErRelationTarget(
   program: Program,
   type: Type,
@@ -126,6 +162,15 @@ function resolveErRelationTarget(
   return undefined;
 }
 
+/**
+ * Returns the Mermaid ER attribute type string for a TypeSpec type.
+ *
+ * Mermaid ER attribute types must be identifier-safe (no angle brackets, pipes,
+ * etc.), so this function converts TypeSpec type kinds to safe type tokens.
+ *
+ * @param program - The TypeSpec program.
+ * @param type - The property type to describe.
+ */
 function erAttrType(program: Program, type: Type): string {
   switch (type.kind) {
     case "Scalar":
@@ -155,6 +200,15 @@ function erAttrType(program: Program, type: Type): string {
   }
 }
 
+/**
+ * Strips characters from a name that are not allowed in a Mermaid ER identifier.
+ *
+ * Keeps alphanumeric characters, underscores, hyphens, and tildes.
+ * Replaces everything else with `_`, and prepends `_` if the first character
+ * is a digit (Mermaid identifiers may not start with a number).
+ *
+ * @param value - The raw property or type name.
+ */
 function sanitizeErName(value: string): string {
   return value.replace(/[^a-zA-Z0-9_\-~]/g, "_").replace(/^([0-9])/, "_$1");
 }

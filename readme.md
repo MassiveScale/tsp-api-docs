@@ -1,5 +1,9 @@
 # @massivescale/tsp-api-docs
 
+[![npm version](https://badge.fury.io/js/@massivescale%2Ftsp-api-docs.svg)](https://www.npmjs.com/package/@massivescale/tsp-api-docs)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![CI](https://github.com/MassiveScale/tsp-api-docs/actions/workflows/pr-validation.yml/badge.svg)](https://github.com/MassiveScale/tsp-api-docs/actions/workflows/pr-validation.yml)
+
 TypeSpec emitter for generating API reference documentation in Markdown.
 
 Supports multiple output formats targeting Azure DevOps Wiki, GitHub, and DocFx.
@@ -20,28 +24,23 @@ Supports multiple output formats targeting Azure DevOps Wiki, GitHub, and DocFx.
 - Related-methods table on type pages lists only operations that directly address the type — return it, accept it as a parameter, or use a direct array/record/union of it. Operations that reference the type only through a nested property of another model are excluded. Types decorated with `@error` are never treated as addressable entities and have no Methods section.
 - DocFx `toc.yml` output is YAML-safe — service and page titles containing colons or other special characters are properly quoted.
 
-## Prerequisites
+## Requirements
 
-- Node.js (current LTS recommended)
-- npm
-- TypeSpec compiler available in your environment
+- Node.js 18 or later
+- `@typespec/compiler` >= 1.12.0
+- `@typespec/http` >= 1.12.0
+- `@typespec/versioning` >= 0.82.0
 
 ## Install
 
 ```bash
-npm install
+npm install --save-dev @massivescale/tsp-api-docs
 ```
 
-## Build
+Peer dependencies must also be present in your project:
 
 ```bash
-npm run build
-```
-
-## Test
-
-```bash
-npm test
+npm install --save-dev @typespec/compiler @typespec/http @typespec/versioning
 ```
 
 ## Emitter Usage
@@ -273,11 +272,17 @@ All templates receive the standard view model for their page type. The following
 
 Refer to the built-in templates in `templates/` for the full variable list for each page type.
 
-## Development Notes
+## Contributing
 
-- Main emitter implementation: `src/emitter.ts`
-- Emitter option schema: `src/lib.ts`
-- Template loader: `src/templates.ts`
-- Tests: `test/emitter.test.js`
-- Example TypeSpec projects: `examples/`
-- Project-specific Copilot guidance: `.github/copilot-instructions.md`
+```bash
+git clone https://github.com/MassiveScale/tsp-api-docs.git
+cd tsp-api-docs
+npm install
+npm test
+```
+
+Key source files: `src/emitter.ts` (core), `src/lib.ts` (option schema), `src/templates.ts` (template loader). Example TypeSpec projects are in `examples/`.
+
+## License
+
+[MIT](LICENSE)

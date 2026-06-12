@@ -12,6 +12,15 @@ import {
 import { containerLabel } from "./utils.js";
 import { entityId } from "./type-ref.js";
 
+/**
+ * Recursively collects all descendant namespaces of `serviceNamespace`,
+ * including the namespace's own child namespaces and their children.
+ *
+ * The root namespace itself is not included — only its descendants.
+ *
+ * @param serviceNamespace - The namespace whose descendants to collect.
+ * @returns A flat array of all descendant namespaces in declaration order.
+ */
 export function collectNamespaces(serviceNamespace: Namespace): Namespace[] {
   const namespaces: Namespace[] = [];
 
@@ -23,6 +32,15 @@ export function collectNamespaces(serviceNamespace: Namespace): Namespace[] {
   return namespaces;
 }
 
+/**
+ * Collects all non-template operations reachable from `namespace`, including
+ * operations declared directly on the namespace, inside interfaces, and inside
+ * nested child namespaces. Deduplicates by entity ID.
+ *
+ * @param program - The TypeSpec program (used to compute entity IDs and labels).
+ * @param namespace - The namespace to walk.
+ * @returns A deduplicated array of operation descriptors sorted by declaration order.
+ */
 export function collectOperations(
   program: Program,
   namespace: Namespace,
@@ -63,6 +81,13 @@ export function collectOperations(
   return dedupeById(operations);
 }
 
+/**
+ * Collects all non-template operations declared on a single TypeSpec interface.
+ *
+ * @param program - The TypeSpec program.
+ * @param iface - The interface whose operations to collect.
+ * @returns An array of operation descriptors for every non-skipped operation.
+ */
 export function collectInterfaceOperations(
   program: Program,
   iface: Interface,
@@ -95,6 +120,17 @@ export function collectInterfaceOperations(
   return operations;
 }
 
+/**
+ * Collects all named, non-template types (Models, Scalars, Enums, Unions)
+ * reachable from `namespace` and its children. Deduplicates by entity ID.
+ *
+ * Anonymous models and template declarations are excluded because they have
+ * no stable name and therefore cannot have their own documentation page.
+ *
+ * @param program - The TypeSpec program.
+ * @param namespace - The namespace to walk.
+ * @returns A deduplicated array of type descriptors.
+ */
 export function collectTypes(
   program: Program,
   namespace: Namespace,
@@ -152,6 +188,15 @@ export function collectTypes(
   return dedupeById(types);
 }
 
+/**
+ * Returns `true` when a type should be excluded from emitted documentation.
+ *
+ * Template declarations (e.g. `model Foo<T>`) are skipped because they are
+ * abstract building blocks, not concrete API types. Enum declarations are
+ * never skipped — TypeSpec enums cannot be template declarations.
+ *
+ * @param type - The TypeSpec type to test.
+ */
 export function shouldSkipType(
   type: Operation | Model | Scalar | Enum | Union,
 ): boolean {
@@ -166,6 +211,16 @@ export function shouldSkipType(
   }
 }
 
+/**
+ * Removes duplicate entries from an array, keeping only the first occurrence
+ * of each unique `id`.
+ *
+ * Used after recursive namespace walks where the same type or operation can
+ * be encountered more than once (e.g. through versioning snapshots).
+ *
+ * @param entries - Array of objects with a string `id` field.
+ * @returns A new array with duplicates removed, preserving insertion order.
+ */
 export function dedupeById<T extends { id: string }>(entries: T[]): T[] {
   const seen = new Set<string>();
   const deduped: T[] = [];

@@ -36,11 +36,14 @@ import {
 } from "./output.js";
 import { buildRelationDiagram } from "./relation-diagram.js";
 
+// Handlebars ships both ESM and CJS builds. In some module environments the
+// default export is nested under a `.default` property; this normalizes both.
 const Handlebars =
   "default" in HandlebarsModule
     ? (HandlebarsModule.default as typeof HandlebarsModule)
     : HandlebarsModule;
 
+// Register shared Handlebars helpers used by multiple templates.
 Handlebars.registerHelper("join", (values: string[], separator: string) =>
   values.join(separator),
 );
@@ -48,24 +51,60 @@ Handlebars.registerHelper("mdCell", (value: unknown) =>
   escapeMarkdownCell(String(value ?? "")),
 );
 
+/**
+ * One versioned service entry in the root service index.
+ * Extends {@link RenderedDoc} with the version string for the index grouping logic.
+ */
 interface VersionedServiceIndexEntry extends RenderedDoc {
+  /** The version string (e.g. `"v1.0"`) used to sort within the group. */
   version: string;
 }
 
+/**
+ * A group of versioned entries that share the same base API name.
+ * Used in the root service index to render expandable version lists.
+ */
 interface VersionedServiceGroup {
+  /** The base API name common to all versions in this group. */
   name: string;
+  /** All version entries in this group, sorted ascending by version. */
   versions: VersionedServiceIndexEntry[];
 }
 
+/**
+ * The data model passed to the `service-index.md.hbs` Handlebars template.
+ * Separates non-versioned services from grouped versioned services so the
+ * template can render them in different sections.
+ */
 interface ServiceIndexModel {
+  /** Non-versioned service entries to render as a flat list. */
   services: Array<RenderedDoc>;
+  /** Versioned services grouped by base name and sorted by version. */
   versionedServices: VersionedServiceGroup[];
 }
 
+/**
+ * Compiles a Handlebars template source string with `noEscape: true`.
+ *
+ * HTML escaping is disabled because our output is Markdown, not HTML, and
+ * escaping would corrupt type reference strings that contain characters like `<`.
+ *
+ * @param source - The raw Handlebars template source text.
+ * @returns A compiled Handlebars template delegate.
+ */
 function compileTemplate<T>(source: string): Handlebars.TemplateDelegate<T> {
   return Handlebars.compile<T>(source, { noEscape: true });
 }
 
+/**
+ * Resolves each template override path relative to `process.cwd()`.
+ *
+ * Paths in `tspconfig.yaml` are typically project-relative. This ensures they
+ * are resolved to absolute paths before being passed to `loadTemplates`.
+ *
+ * @param rawOverrides - The raw template override map from emitter options.
+ * @returns A new override map with all paths resolved to absolute paths.
+ */
 function resolveTemplateOverrides(
   rawOverrides?: TemplateOverrides,
 ): TemplateOverrides {
@@ -82,6 +121,21 @@ function resolveTemplateOverrides(
   return resolved;
 }
 
+/**
+ * The TypeSpec emitter entry point, invoked by the compiler after type-checking.
+ *
+ * This function orchestrates the entire documentation generation pipeline:
+ * 1. Resolves emitter options and loads Handlebars templates.
+ * 2. Optionally cleans the output directory.
+ * 3. Collects all service entries (including versioned snapshots).
+ * 4. Optionally emits a root service index page and DocFx root `toc.yml`.
+ * 5. For each service: emits overview, operations index, types index,
+ *    per-operation pages, per-type pages, DocFx `toc.yml`, and optionally a
+ *    Mermaid relation diagram.
+ *
+ * @param context - The TypeSpec emit context, carrying the program, options,
+ *   and the resolved emitter output directory.
+ */
 export async function $onEmit(context: EmitContext<ApiDocsEmitterOptions>) {
   const program = context.program;
   const format: OutputFormat = context.options["format"] ?? "azure-devops";
@@ -99,6 +153,8 @@ export async function $onEmit(context: EmitContext<ApiDocsEmitterOptions>) {
   try {
     templates = loadTemplates(templateOverrides);
   } catch (err) {
+    // Map the load error back to the override key that caused it, so the
+    // diagnostic message can name both the template key and the bad path.
     const failedEntry = Object.entries(templateOverrides).find(([, path]) => {
       try {
         return err instanceof Error && err.message.includes(path);
@@ -118,6 +174,7 @@ export async function $onEmit(context: EmitContext<ApiDocsEmitterOptions>) {
     return;
   }
 
+  // Compile all eight templates once up-front to catch syntax errors early.
   const markdownOverview = compileTemplate<OverviewPageModel>(
     templates.overview,
   );
@@ -139,28 +196,35 @@ export async function $onEmit(context: EmitContext<ApiDocsEmitterOptions>) {
     templates.docfxProject,
   );
 
+  /** Renders the root service index and prettifies the resulting Markdown. */
   function renderServiceIndex(model: ServiceIndexModel): string {
     return prettifyMarkdown(markdownIndex(model));
   }
+  /** Renders an overview page and prettifies the resulting Markdown. */
   function renderOverview(model: OverviewPageModel): string {
     return prettifyMarkdown(markdownOverview(model));
   }
+  /** Renders an operation page and prettifies the resulting Markdown. */
   function renderOperation(model: OperationPageModel): string {
     return prettifyMarkdown(markdownOperation(model));
   }
+  /** Renders a type page (Model/Union/Scalar uses `type.hbs`; Enum uses `enum.hbs`). */
   function renderType(model: TypePageModel): string {
     const template = model.kind === "Enum" ? markdownEnum : markdownType;
     return prettifyMarkdown(template(model));
   }
+  /** Renders an operations index page and prettifies the resulting Markdown. */
   function renderOperationsIndex(model: OperationsIndexModel): string {
     return prettifyMarkdown(markdownOperationsIndex(model));
   }
+  /** Renders a types index page and prettifies the resulting Markdown. */
   function renderTypesIndex(model: TypesIndexModel): string {
     return prettifyMarkdown(markdownTypesIndex(model));
   }
 
   if (context.options["clean-output-dir"] ?? true) {
     const outputDir = resolvePath(process.cwd(), context.emitterOutputDir);
+    // Safety guard: refuse to delete the working directory or filesystem root.
     if (outputDir === process.cwd() || outputDir === "/") {
       throw new Error(
         `Refusing to delete unsafe output directory: ${outputDir}`,
@@ -254,6 +318,8 @@ export async function $onEmit(context: EmitContext<ApiDocsEmitterOptions>) {
   for (const service of serviceEntries) {
     const baseDir = resolvePath(context.emitterOutputDir, service.slug);
 
+    // azure-devops: overview pages sit one level above the service folder.
+    // github/docfx: overview pages sit inside the service folder.
     const overviewPath =
       format === "azure-devops"
         ? resolvePath(
