@@ -200,12 +200,24 @@ describe("service entry", () => {
 
     const toc = result.outputs["toc.yml"];
     assert.ok(toc !== undefined, "root toc.yml should be emitted");
-    assert.ok(toc.includes("- name: Versions"), "toc.yml should have a Versions group");
-    assert.ok(toc.includes('"Widget API"'), "toc.yml should include the service name");
+    assert.ok(
+      toc.includes("- name: Versions"),
+      "toc.yml should have a Versions group",
+    );
+    assert.ok(
+      toc.includes('"Widget API"'),
+      "toc.yml should include the service name",
+    );
     assert.ok(toc.includes('"1.0"'), "toc.yml should list version 1.0");
     assert.ok(toc.includes('"2.0"'), "toc.yml should list version 2.0");
-    assert.ok(toc.includes("href: 1-0/index.md"), "toc.yml should link to version 1.0 overview");
-    assert.ok(toc.includes("href: 2-0/index.md"), "toc.yml should link to version 2.0 overview");
+    assert.ok(
+      toc.includes("href: 1-0/index.md"),
+      "toc.yml should link to version 1.0 overview",
+    );
+    assert.ok(
+      toc.includes("href: 2-0/index.md"),
+      "toc.yml should link to version 2.0 overview",
+    );
   });
 
   describe("api-name option", () => {
