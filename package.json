@@ -52,7 +52,7 @@
     "@typespec/versioning": ">=0.82.0"
   },
   "devDependencies": {
-    "@types/node": "^25.9.2",
+    "@types/node": "^26.1.1",
     "@typespec/compiler": "^1.12.0",
     "@typespec/http": "^1.12.0",
     "@typespec/versioning": "^0.83.0",
