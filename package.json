@@ -1,6 +1,6 @@
 {
   "name": "@massivescale/tsp-api-docs",
-  "version": "1.0.0-beta2",
+  "version": "1.0.0-beta3",
   "description": "TypeSpec emitter for generating API reference documentation in Markdown for Azure DevOps Wiki, GitHub, and DocFx.",
   "type": "module",
   "main": "dist/src/index.js",
