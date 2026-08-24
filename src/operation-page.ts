@@ -28,6 +28,7 @@ import {
   FALLBACK_SUMMARY,
   breadcrumbsForOperation,
   describeSummary,
+  formatExternalDocsLink,
   formatStatusCode,
   toTitleCaseLabel,
 } from "./utils.js";
@@ -134,6 +135,8 @@ export interface OperationPageModel {
   returnsDoc?: string;
   /** Doc-comment content from the operation's `@errors` tag, if present. */
   errorsDoc?: string;
+  /** Markdown link rendered from `@externalDocs` on the operation, if present. */
+  externalDocs?: string;
   /** One or more code examples (from `@opExample` or synthetically generated). */
   examples: OperationExampleDoc[];
 }
@@ -200,6 +203,7 @@ export function buildOperationPage(
     responseHeaders: buildResponseHeaderDocs(program, httpOperation, makeRef),
     returnsDoc: getReturnsDoc(program, operation),
     errorsDoc: getErrorsDoc(program, operation),
+    externalDocs: formatExternalDocsLink(program, operation),
     examples: operationExamples(program, operation, httpOperation, routePrefix),
   };
 }

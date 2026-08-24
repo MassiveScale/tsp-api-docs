@@ -5,8 +5,10 @@ import "./models.tsp";
 
 using Http;
 using Versioning;
+using OpenAPI;
 @service(#{ title: "MassiveScale Sandbox - Pet Store API" })
 @versioned(Versions)
+@externalDocs("https://example.com/docs/petstore", "Full Pet Store API reference")
 namespace MassiveScale.Sandbox.Api;
 
 @route("store")
@@ -50,6 +52,7 @@ interface Pets {
     list(@path storeId: string): Pet[];
 
     @doc("Adds a new pet to the specified store.")
+    @externalDocs("https://example.com/docs/operations/create-pet", "How to add a new pet to a store")
     @post
     create(@path storeId: string, @body body: Create<Pet>): Pet | ErrorResponse;
 

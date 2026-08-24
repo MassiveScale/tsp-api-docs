@@ -1,3 +1,7 @@
+import "@typespec/openapi";
+
+using OpenAPI;
+
 namespace MassiveScale.Sandbox.Api;
 
 /**
@@ -23,6 +27,7 @@ model EntityBase {
  * Represents an error response from the API.
  */
 @error
+@externalDocs("https://example.com/docs/errors", "Error handling guide")
 model ErrorResponse {
     @doc("The HTTP status of the error response. e.g. badRequest, notFound, internalServerError, etc.")
     code: string;

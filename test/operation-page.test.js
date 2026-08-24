@@ -288,4 +288,90 @@ describe("operation page", () => {
       );
     });
   });
+
+  describe("@externalDocs", () => {
+    const openApiTester = createTester(
+      resolvePath(fileURLToPath(import.meta.url), "../../"),
+      {
+        libraries: [
+          "@massivescale/tsp-api-docs",
+          "@typespec/http",
+          "@typespec/openapi",
+        ],
+      },
+    ).importLibraries();
+
+    it("renders a Markdown link using the description as link text", async () => {
+      const result = await openApiTester.emit("@massivescale/tsp-api-docs")
+        .compile(`
+        using Http;
+        using OpenAPI;
+
+        @service(#{ title: "Widget API" })
+        namespace Demo;
+
+        model Widget { id: string; }
+
+        @route("/widgets")
+        interface Widgets {
+          @externalDocs("https://example.com/docs", "Full reference")
+          @get read(@path id: string): Widget;
+        }
+      `);
+
+      const page = result.outputs["widget-api/api/Widgets-Read.md"];
+      assert.ok(page.includes("## External documentation"));
+      assert.ok(
+        page.includes("[Full reference](https://example.com/docs)"),
+      );
+    });
+
+    it("falls back to the bare URL as link text when no description is given", async () => {
+      const result = await openApiTester.emit("@massivescale/tsp-api-docs")
+        .compile(`
+        using Http;
+        using OpenAPI;
+
+        @service(#{ title: "Widget API" })
+        namespace Demo;
+
+        model Widget { id: string; }
+
+        @route("/widgets")
+        interface Widgets {
+          @externalDocs("https://example.com/docs")
+          @get read(@path id: string): Widget;
+        }
+      `);
+
+      const page = result.outputs["widget-api/api/Widgets-Read.md"];
+      assert.ok(page.includes("## External documentation"));
+      assert.ok(
+        page.includes(
+          "[https://example.com/docs](https://example.com/docs)",
+        ),
+      );
+    });
+
+    it("omits the External documentation section when @externalDocs is absent", async () => {
+      const result = await openApiTester.emit("@massivescale/tsp-api-docs")
+        .compile(`
+        using Http;
+        using OpenAPI;
+
+        @service(#{ title: "Widget API" })
+        namespace Demo;
+
+        model Widget { id: string; }
+
+        @route("/widgets")
+        interface Widgets {
+          @get read(@path id: string): Widget;
+        }
+      `);
+
+      const page = result.outputs["widget-api/api/Widgets-Read.md"];
+      assert.ok(!page.includes("## External documentation"));
+    });
+  });
 });

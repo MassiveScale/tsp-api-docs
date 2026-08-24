@@ -19,7 +19,11 @@ import {
   makeLinkedTypeRef,
   modelBaseType,
 } from "./type-ref.js";
-import { breadcrumbsForType, describeSummary } from "./utils.js";
+import {
+  breadcrumbsForType,
+  describeSummary,
+  formatExternalDocsLink,
+} from "./utils.js";
 import { modelProperties } from "./operation-page.js";
 import type { ParameterDoc } from "./operation-page.js";
 
@@ -71,6 +75,8 @@ export interface TypePageModel {
   summary?: string;
   /** Deprecation message from `@deprecated`, if present. */
   deprecated?: string;
+  /** Markdown link rendered from `@externalDocs` on the type, if present. */
+  externalDocs?: string;
   /** API version label, e.g. `"v1.0"`, when the service is versioned. */
   versionLabel?: string;
   /** Resolved API name from emitter options, if set. */
@@ -139,6 +145,7 @@ export function buildTypePage(
       title: type.name,
       summary,
       deprecated: getDeprecated(program, type),
+      externalDocs: formatExternalDocsLink(program, type),
       versionLabel,
       apiName,
       kind: type.kind,
@@ -164,6 +171,7 @@ export function buildTypePage(
       title: type.name ?? "union",
       summary,
       deprecated: getDeprecated(program, type),
+      externalDocs: formatExternalDocsLink(program, type),
       versionLabel,
       apiName,
       kind: type.kind,
@@ -189,6 +197,7 @@ export function buildTypePage(
       title: type.name,
       summary,
       deprecated: getDeprecated(program, type),
+      externalDocs: formatExternalDocsLink(program, type),
       versionLabel,
       apiName,
       kind: type.kind,
@@ -210,6 +219,7 @@ export function buildTypePage(
     title: type.name,
     summary,
     deprecated: getDeprecated(program, type),
+    externalDocs: formatExternalDocsLink(program, type),
     versionLabel,
     apiName,
     kind: type.kind,

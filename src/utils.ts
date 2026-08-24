@@ -13,6 +13,7 @@ import {
   type Union,
 } from "@typespec/compiler";
 import { type HttpStatusCodeRange } from "@typespec/http";
+import { getExternalDocs } from "@typespec/openapi";
 import { CliPrettify } from "markdown-table-prettify";
 
 /**
@@ -156,6 +157,25 @@ export function escapeMarkdownCell(value: string): string {
     .replace(/\|/gu, "\\|")
     .replace(/[\r\n]+/gu, " ")
     .trim();
+}
+
+/**
+ * Renders `@externalDocs` on `entity` as a single Markdown link, or `undefined`
+ * if the decorator isn't present. Uses the description as the link text when
+ * given, falling back to the bare URL otherwise.
+ *
+ * @param program - The TypeSpec program.
+ * @param entity - The type or namespace to inspect for `@externalDocs`.
+ * @returns A Markdown link string, or `undefined` if the decorator is absent.
+ */
+export function formatExternalDocsLink(
+  program: Program,
+  entity: Type,
+): string | undefined {
+  const externalDocs = getExternalDocs(program, entity);
+  if (!externalDocs) return undefined;
+  const label = externalDocs.description ?? externalDocs.url;
+  return `[${label}](${externalDocs.url})`;
 }
 
 /**
