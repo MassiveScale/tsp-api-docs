@@ -105,6 +105,73 @@ describe("operation page", () => {
     );
     assert.ok(operationPage.includes("GET /api/widgets/string?expand=string"));
     assert.ok(operationPage.includes("ConsistencyLevel: string"));
+    // Regression test: "## Response headers" must render regardless of
+    // whether the operation has an @errorsDoc — it was previously nested
+    // inside the {{#if errorsDoc}} block and never rendered for any operation.
+    assert.ok(operationPage.includes("## Response headers"));
+    assert.ok(
+      operationPage.includes(
+        "This method does not return custom response headers.",
+      ),
+    );
+    assert.ok(!operationPage.includes("## Errors"));
+  });
+
+  it("renders @errorsDoc content under an Errors heading", async () => {
+    const result = await httpTester.emit("@massivescale/tsp-api-docs").compile(`
+      using Http;
+
+      @service(#{ title: "Widget API" })
+      namespace Demo;
+
+      model Widget {
+        id: string;
+      }
+
+      @error
+      model WidgetError {
+        code: string;
+      }
+
+      @route("/widgets")
+      interface Widgets {
+        @doc("Reads a single widget resource.")
+        @errorsDoc("Returns a 404 WidgetError when the widget does not exist.")
+        @get read(@path id: string): Widget | WidgetError;
+      }
+    `);
+
+    const operationPage = result.outputs["widget-api/api/Widgets-Read.md"];
+    assert.ok(operationPage.includes("## Errors"));
+    assert.ok(
+      operationPage.includes(
+        "Returns a 404 WidgetError when the widget does not exist.",
+      ),
+    );
+    // Response headers should still render alongside the Errors section.
+    assert.ok(operationPage.includes("## Response headers"));
+  });
+
+  it("omits the Errors section when no @errorsDoc is present", async () => {
+    const result = await httpTester.emit("@massivescale/tsp-api-docs").compile(`
+      using Http;
+
+      @service(#{ title: "Widget API" })
+      namespace Demo;
+
+      model Widget {
+        id: string;
+      }
+
+      @route("/widgets")
+      interface Widgets {
+        @get read(@path id: string): Widget;
+      }
+    `);
+
+    const operationPage = result.outputs["widget-api/api/Widgets-Read.md"];
+    assert.ok(!operationPage.includes("## Errors"));
+    assert.ok(operationPage.includes("## Response headers"));
   });
 
   describe("route-prefix option", () => {
@@ -219,6 +286,88 @@ describe("operation page", () => {
         page.includes("GET /widgets/{id}"),
         "HTTP request should have no prefix when route-prefix is empty",
       );
+    });
+  });
+
+  describe("@externalDocs", () => {
+    const openApiTester = createTester(
+      resolvePath(fileURLToPath(import.meta.url), "../../"),
+      {
+        libraries: [
+          "@massivescale/tsp-api-docs",
+          "@typespec/http",
+          "@typespec/openapi",
+        ],
+      },
+    ).importLibraries();
+
+    it("renders a Markdown link using the description as link text", async () => {
+      const result = await openApiTester.emit("@massivescale/tsp-api-docs")
+        .compile(`
+        using Http;
+        using OpenAPI;
+
+        @service(#{ title: "Widget API" })
+        namespace Demo;
+
+        model Widget { id: string; }
+
+        @route("/widgets")
+        interface Widgets {
+          @externalDocs("https://example.com/docs", "Full reference")
+          @get read(@path id: string): Widget;
+        }
+      `);
+
+      const page = result.outputs["widget-api/api/Widgets-Read.md"];
+      assert.ok(page.includes("## External documentation"));
+      assert.ok(page.includes("[Full reference](https://example.com/docs)"));
+    });
+
+    it("falls back to the bare URL as link text when no description is given", async () => {
+      const result = await openApiTester.emit("@massivescale/tsp-api-docs")
+        .compile(`
+        using Http;
+        using OpenAPI;
+
+        @service(#{ title: "Widget API" })
+        namespace Demo;
+
+        model Widget { id: string; }
+
+        @route("/widgets")
+        interface Widgets {
+          @externalDocs("https://example.com/docs")
+          @get read(@path id: string): Widget;
+        }
+      `);
+
+      const page = result.outputs["widget-api/api/Widgets-Read.md"];
+      assert.ok(page.includes("## External documentation"));
+      assert.ok(
+        page.includes("[https://example.com/docs](https://example.com/docs)"),
+      );
+    });
+
+    it("omits the External documentation section when @externalDocs is absent", async () => {
+      const result = await openApiTester.emit("@massivescale/tsp-api-docs")
+        .compile(`
+        using Http;
+        using OpenAPI;
+
+        @service(#{ title: "Widget API" })
+        namespace Demo;
+
+        model Widget { id: string; }
+
+        @route("/widgets")
+        interface Widgets {
+          @get read(@path id: string): Widget;
+        }
+      `);
+
+      const page = result.outputs["widget-api/api/Widgets-Read.md"];
+      assert.ok(!page.includes("## External documentation"));
     });
   });
 });

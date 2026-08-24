@@ -42,6 +42,7 @@ const widgetSource = `
   @summary("Return a widget by id.")
   @doc("Reads a single widget resource.")
   @returnsDoc("The requested widget.")
+  @errorsDoc("Returns an error if the widget id does not exist.")
   op getWidget(@doc("The widget identifier.") id: string): Widget;
 `;
 
@@ -239,6 +240,12 @@ describe("service entry", () => {
         result.outputs["my-awesome-api/resources/Widget.md"] !== undefined,
         "type file should be under api-name folder",
       );
+      assert.ok(
+        result.outputs["my-awesome-api/api/Get-Widget.md"].includes(
+          "## Errors",
+        ),
+        "operation file should render @errorsDoc content",
+      );
       assert.equal(
         result.outputs["widget-api.md"],
         undefined,
@@ -351,6 +358,82 @@ describe("service entry", () => {
         overview.includes("ApiName: My Awesome API"),
         "apiName variable should be available in template",
       );
+    });
+  });
+
+  describe("@externalDocs", () => {
+    const openApiTester = createTester(
+      resolvePath(fileURLToPath(import.meta.url), "../../"),
+      {
+        libraries: ["@massivescale/tsp-api-docs", "@typespec/openapi"],
+      },
+    ).importLibraries();
+
+    it("renders a Markdown link using the description as link text on the service namespace", async () => {
+      const result = await openApiTester.emit("@massivescale/tsp-api-docs")
+        .compile(`
+        using OpenAPI;
+
+        @externalDocs("https://example.com/docs", "Full reference")
+        @service(#{ title: "Widget API" })
+        namespace Demo;
+
+        model Widget {
+          id: string;
+        }
+
+        op getWidget(id: string): Widget;
+      `);
+
+      const overview = result.outputs["widget-api.md"];
+      assert.ok(overview.includes("## External documentation"));
+      assert.ok(
+        overview.includes("[Full reference](https://example.com/docs)"),
+      );
+    });
+
+    it("falls back to the bare URL as link text on the service namespace when no description is given", async () => {
+      const result = await openApiTester.emit("@massivescale/tsp-api-docs")
+        .compile(`
+        using OpenAPI;
+
+        @externalDocs("https://example.com/docs")
+        @service(#{ title: "Widget API" })
+        namespace Demo;
+
+        model Widget {
+          id: string;
+        }
+
+        op getWidget(id: string): Widget;
+      `);
+
+      const overview = result.outputs["widget-api.md"];
+      assert.ok(overview.includes("## External documentation"));
+      assert.ok(
+        overview.includes(
+          "[https://example.com/docs](https://example.com/docs)",
+        ),
+      );
+    });
+
+    it("omits the External documentation section on the service namespace when @externalDocs is absent", async () => {
+      const result = await openApiTester.emit("@massivescale/tsp-api-docs")
+        .compile(`
+        using OpenAPI;
+
+        @service(#{ title: "Widget API" })
+        namespace Demo;
+
+        model Widget {
+          id: string;
+        }
+
+        op getWidget(id: string): Widget;
+      `);
+
+      const overview = result.outputs["widget-api.md"];
+      assert.ok(!overview.includes("## External documentation"));
     });
   });
 });

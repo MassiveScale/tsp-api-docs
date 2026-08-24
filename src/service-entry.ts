@@ -26,6 +26,7 @@ import { arrayElementType, makeLinkedTypeRef } from "./type-ref.js";
 import {
   describeSummary,
   describeNamespace,
+  formatExternalDocsLink,
   namespaceName,
   operationFileName,
   slugify,
@@ -93,6 +94,8 @@ export interface OverviewPageModel {
   title: string;
   /** Raw summary from `@summary` or `@doc` on the service namespace, if present. */
   summary?: string;
+  /** Markdown link rendered from `@externalDocs` on the service namespace, if present. */
+  externalDocs?: string;
   /** Version label string (e.g. `"v1.0"`), only present for versioned services. */
   versionLabel?: string;
   /** Resolved API name from emitter options, if set. */
@@ -347,6 +350,7 @@ export function collectServiceEntry(
     summary:
       getSummary(program, serviceNamespace) ??
       getDoc(program, serviceNamespace),
+    externalDocs: formatExternalDocsLink(program, serviceNamespace),
     versionLabel: version?.value,
     apiName: resolvedApiName,
     serviceName: undefined,

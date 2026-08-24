@@ -26,10 +26,11 @@ Supports multiple output formats targeting Azure DevOps Wiki, GitHub, and DocFx.
 
 ## Requirements
 
-- Node.js 18 or later
-- `@typespec/compiler` >= 1.12.0
-- `@typespec/http` >= 1.12.0
-- `@typespec/versioning` >= 0.82.0
+- Node.js 22 or later
+- `@typespec/compiler` ^1.15.0
+- `@typespec/http` ^1.15.0
+- `@typespec/openapi` ^1.15.0
+- `@typespec/versioning` ^0.85.0
 
 ## Install
 
@@ -40,7 +41,7 @@ npm install --save-dev @massivescale/tsp-api-docs
 Peer dependencies must also be present in your project:
 
 ```bash
-npm install --save-dev @typespec/compiler @typespec/http @typespec/versioning
+npm install --save-dev @typespec/compiler @typespec/http @typespec/openapi @typespec/versioning
 ```
 
 ## Emitter Usage

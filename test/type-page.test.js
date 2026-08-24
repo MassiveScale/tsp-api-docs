@@ -117,4 +117,245 @@ describe("type page", () => {
       result.outputs["error-test-api/resources/ErrorResponse.md"];
     assert.ok(!errorPage.includes("## Methods"));
   });
+
+  it("renders a plain boolean property as a native boolean in the example JSON", async () => {
+    const result = await tester.emit("@massivescale/tsp-api-docs").compile(`
+      @service(#{ title: "Encode API" })
+      namespace Demo;
+
+      model Widget {
+        id: string;
+        active: boolean;
+      }
+
+      interface Widgets {
+        op read(id: string): Widget;
+      }
+    `);
+
+    const widgetPage = result.outputs["encode-api/resources/Widget.md"];
+    assert.ok(widgetPage.includes('"active": true'));
+  });
+
+  it("renders an @encode(string) boolean property as a wire-level string in the example JSON", async () => {
+    const result = await tester.emit("@massivescale/tsp-api-docs").compile(`
+      @service(#{ title: "Encode API" })
+      namespace Demo;
+
+      model Widget {
+        id: string;
+        @encode(string)
+        active: boolean;
+      }
+
+      interface Widgets {
+        op read(id: string): Widget;
+      }
+    `);
+
+    const widgetPage = result.outputs["encode-api/resources/Widget.md"];
+    assert.ok(widgetPage.includes('"active": "true"'));
+  });
+
+  describe("@externalDocs", () => {
+    const openApiTester = createTester(
+      resolvePath(fileURLToPath(import.meta.url), "../../"),
+      {
+        libraries: ["@massivescale/tsp-api-docs", "@typespec/openapi"],
+      },
+    ).importLibraries();
+
+    it("renders a Markdown link using the description as link text on a Model", async () => {
+      const result = await openApiTester.emit("@massivescale/tsp-api-docs")
+        .compile(`
+        using OpenAPI;
+
+        @service(#{ title: "Widget API" })
+        namespace Demo;
+
+        @externalDocs("https://example.com/docs", "Full reference")
+        model Widget {
+          id: string;
+        }
+
+        interface Widgets {
+          op read(id: string): Widget;
+        }
+      `);
+
+      const widgetPage = result.outputs["widget-api/resources/Widget.md"];
+      assert.ok(widgetPage.includes("## External documentation"));
+      assert.ok(
+        widgetPage.includes("[Full reference](https://example.com/docs)"),
+      );
+    });
+
+    it("falls back to the bare URL as link text on a Model when no description is given", async () => {
+      const result = await openApiTester.emit("@massivescale/tsp-api-docs")
+        .compile(`
+        using OpenAPI;
+
+        @service(#{ title: "Widget API" })
+        namespace Demo;
+
+        @externalDocs("https://example.com/docs")
+        model Widget {
+          id: string;
+        }
+
+        interface Widgets {
+          op read(id: string): Widget;
+        }
+      `);
+
+      const widgetPage = result.outputs["widget-api/resources/Widget.md"];
+      assert.ok(widgetPage.includes("## External documentation"));
+      assert.ok(
+        widgetPage.includes(
+          "[https://example.com/docs](https://example.com/docs)",
+        ),
+      );
+    });
+
+    it("omits the External documentation section on a Model when @externalDocs is absent", async () => {
+      const result = await openApiTester.emit("@massivescale/tsp-api-docs")
+        .compile(`
+        using OpenAPI;
+
+        @service(#{ title: "Widget API" })
+        namespace Demo;
+
+        model Widget {
+          id: string;
+        }
+
+        interface Widgets {
+          op read(id: string): Widget;
+        }
+      `);
+
+      const widgetPage = result.outputs["widget-api/resources/Widget.md"];
+      assert.ok(!widgetPage.includes("## External documentation"));
+    });
+
+    it("renders @externalDocs on a Union", async () => {
+      const result = await openApiTester.emit("@massivescale/tsp-api-docs")
+        .compile(`
+        using OpenAPI;
+
+        @service(#{ title: "Widget API" })
+        namespace Demo;
+
+        @externalDocs("https://example.com/docs/color", "Color reference")
+        union Color {
+          "red",
+          "blue",
+        }
+
+        model Widget {
+          id: string;
+          color: Color;
+        }
+
+        interface Widgets {
+          op read(id: string): Widget;
+        }
+      `);
+
+      const colorPage = result.outputs["widget-api/resources/Color.md"];
+      assert.ok(colorPage.includes("## External documentation"));
+      assert.ok(
+        colorPage.includes("[Color reference](https://example.com/docs/color)"),
+      );
+    });
+
+    it("renders @externalDocs on an Enum", async () => {
+      const result = await openApiTester.emit("@massivescale/tsp-api-docs")
+        .compile(`
+        using OpenAPI;
+
+        @service(#{ title: "Widget API" })
+        namespace Demo;
+
+        @externalDocs("https://example.com/docs/status", "Status reference")
+        enum Status {
+          Active,
+          Inactive,
+        }
+
+        model Widget {
+          id: string;
+          status: Status;
+        }
+
+        interface Widgets {
+          op read(id: string): Widget;
+        }
+      `);
+
+      const statusPage = result.outputs["widget-api/resources/Status.md"];
+      assert.ok(statusPage.includes("## External documentation"));
+      assert.ok(
+        statusPage.includes(
+          "[Status reference](https://example.com/docs/status)",
+        ),
+      );
+    });
+
+    it("renders @externalDocs on a Scalar", async () => {
+      const result = await openApiTester.emit("@massivescale/tsp-api-docs")
+        .compile(`
+        using OpenAPI;
+
+        @service(#{ title: "Widget API" })
+        namespace Demo;
+
+        @externalDocs("https://example.com/docs/widgetid", "WidgetId reference")
+        scalar WidgetId extends string;
+
+        model Widget {
+          id: WidgetId;
+        }
+
+        interface Widgets {
+          op read(id: string): Widget;
+        }
+      `);
+
+      const widgetIdPage = result.outputs["widget-api/resources/WidgetId.md"];
+      assert.ok(widgetIdPage.includes("## External documentation"));
+      assert.ok(
+        widgetIdPage.includes(
+          "[WidgetId reference](https://example.com/docs/widgetid)",
+        ),
+      );
+    });
+
+    it("escapes Markdown-significant characters in the description and URL", async () => {
+      const result = await openApiTester.emit("@massivescale/tsp-api-docs")
+        .compile(`
+        using OpenAPI;
+
+        @service(#{ title: "Widget API" })
+        namespace Demo;
+
+        @externalDocs("https://example.com/docs(v2)", "Reference [full]")
+        model Widget {
+          id: string;
+        }
+
+        interface Widgets {
+          op read(id: string): Widget;
+        }
+      `);
+
+      const widgetPage = result.outputs["widget-api/resources/Widget.md"];
+      assert.ok(widgetPage.includes("## External documentation"));
+      assert.ok(
+        widgetPage.includes(
+          "[Reference \\[full\\]](https://example.com/docs\\(v2\\))",
+        ),
+      );
+    });
+  });
 });

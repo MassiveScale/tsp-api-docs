@@ -93,7 +93,6 @@ Don't supply a request body for this method.
 {{else}}
 This method does not declare request parameters.
 {{/if}}
-{{#if errorsDoc}}
 
 ## Response headers
 
@@ -107,9 +106,16 @@ This method does not declare request parameters.
 This method does not return custom response headers.
 {{/if}}
 
+{{#if errorsDoc}}
 ## Errors
 
 {{errorsDoc}}
+
+{{/if}}
+{{#if externalDocs}}
+## External documentation
+
+{{externalDocs}}
 
 {{/if}}
 {{#if examples.length}}

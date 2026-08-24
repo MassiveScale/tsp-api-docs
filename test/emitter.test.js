@@ -32,6 +32,7 @@ const widgetSource = `
   @summary("Return a widget by id.")
   @doc("Reads a single widget resource.")
   @returnsDoc("The requested widget.")
+  @errorsDoc("Returns an error if the widget id does not exist.")
   op getWidget(@doc("The widget identifier.") id: string): Widget;
 `;
 
@@ -57,6 +58,14 @@ describe("tsp-api-docs emitter", () => {
       assert.ok(
         result.outputs["widget-api/resources/Widget.md"].includes(
           "Stable identifier",
+        ),
+      );
+      assert.ok(
+        result.outputs["widget-api/api/Get-Widget.md"].includes("## Errors"),
+      );
+      assert.ok(
+        result.outputs["widget-api/api/Get-Widget.md"].includes(
+          "Returns an error if the widget id does not exist.",
         ),
       );
       assert.equal(result.outputs["widget-api/index.html"], undefined);

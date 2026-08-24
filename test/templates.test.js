@@ -32,6 +32,7 @@ const widgetSource = `
   @summary("Return a widget by id.")
   @doc("Reads a single widget resource.")
   @returnsDoc("The requested widget.")
+  @errorsDoc("Returns an error if the widget id does not exist.")
   op getWidget(@doc("The widget identifier.") id: string): Widget;
 `;
 
@@ -72,6 +73,10 @@ describe("custom templates", () => {
     assert.ok(
       result.outputs["widget-api/api/Get-Widget.md"].includes("# Get Widget"),
       "built-in operation template should still be used",
+    );
+    assert.ok(
+      result.outputs["widget-api/api/Get-Widget.md"].includes("## Errors"),
+      "built-in operation template should still render @errorsDoc content",
     );
     assert.ok(
       result.outputs["widget-api/resources/Widget.md"].includes(

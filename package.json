@@ -8,10 +8,6 @@
     ".": {
       "types": "./dist/src/index.d.ts",
       "default": "./dist/src/index.js"
-    },
-    "./testing": {
-      "types": "./dist/src/testing/index.d.ts",
-      "default": "./dist/src/testing/index.js"
     }
   },
   "files": [
@@ -44,18 +40,20 @@
     "access": "public"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=22.0.0"
   },
   "peerDependencies": {
-    "@typespec/compiler": ">=1.12.0",
-    "@typespec/http": ">=1.12.0",
-    "@typespec/versioning": ">=0.82.0"
+    "@typespec/compiler": "^1.15.0",
+    "@typespec/http": "^1.15.0",
+    "@typespec/openapi": "^1.15.0",
+    "@typespec/versioning": "^0.85.0"
   },
   "devDependencies": {
     "@types/node": "^25.9.2",
-    "@typespec/compiler": "^1.12.0",
-    "@typespec/http": "^1.12.0",
-    "@typespec/versioning": "^0.83.0",
+    "@typespec/compiler": "^1.15.0",
+    "@typespec/http": "^1.15.0",
+    "@typespec/openapi": "^1.15.0",
+    "@typespec/versioning": "^0.85.0",
     "eslint": "^9.39.4",
     "handlebars": "^4.7.9",
     "prettier": "^3.8.3",

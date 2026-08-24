@@ -7,6 +7,30 @@ This project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- Added support for the `@externalDocs` decorator (`@typespec/openapi`) on operations, types (models/unions/enums/scalars), and the service namespace — rendered as an "External documentation" Markdown link section. This introduces a new `@typespec/openapi: ^1.15.0` peer/dev dependency, installed alongside the existing `@typespec/compiler`/`@typespec/http` `^1.15.0` and `@typespec/versioning` `^0.85.0`.
+- Operation pages now render `@errorsDoc` doc-comment content under a new "## Errors" heading, sourced via `getErrorsDoc` from `@typespec/compiler`. Previously the operation page model always hard-coded `errorsDoc: undefined`, so the `@errorsDoc` tag was silently ignored.
+- `@encode(string)` on a `boolean` model property is now reflected in generated example JSON: the property renders as the wire-level string `"true"`/`"false"` instead of a native JSON boolean, matching how `@massivescale/tsp-aspnetcore-api`, `@massivescale/tsp-refit-client`, and `@massivescale/tsp-ts-client-models` already handle this encoding. Plain `boolean` properties are unaffected.
+- New `tsp-api-docs/missing-errors-doc` linter rule (in `recommended` and `all` rule sets): flags an operation that can return an error response — a status code `>= 400`, or a response body typed with `@error` — but has no `@errorsDoc` doc-comment tag. Reports once per operation.
+
+### Fixed
+
+- "## Response headers" on operation pages now renders unconditionally, matching every other section in the operation template. It was previously nested inside the `{{#if errorsDoc}}` block alongside "## Errors", so — since `errorsDoc` was always `undefined` before this release — response headers never rendered on any generated operation page.
+
+### Changed
+
+- Upgraded the supported TypeSpec toolchain to the 1.15.0 release train: `@typespec/compiler` and `@typespec/http` to `^1.15.0`, and `@typespec/versioning` to `^0.85.0`.
+
+### Removed
+
+- **Breaking (tooling):** Removed the `./testing` package export and the `TspApiDocsTestLibrary` it exposed. It relied on `createTestLibrary`/`TypeSpecTestLibrary`. Consumers writing tests against this emitter should use `createTester` from `@typespec/compiler/testing` directly (see `test/emitter.test.js` for the pattern).
+- **Breaking:** Raised the minimum supported Node.js version to 22. `@typespec/compiler` and `@typespec/openapi` at `^1.15.0` both require Node `>=22.0.0`, so `engines.node` in `package.json` now accurately reflects that floor instead of the previously advertised `>=18.0.0`. Consumers on Node 18 or 20 must upgrade.
+
+---
+
 ## [v1.0.0-beta2] — DocFx Improvements
 
 ### Added
