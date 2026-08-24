@@ -1,11 +1,14 @@
 import {
+  getEncode,
   getTypeName,
   isArrayModelType,
   isGlobalNamespace,
   isRecordModelType,
   walkPropertiesInherited,
+  type EncodeData,
   type Enum,
   type Model,
+  type ModelProperty,
   type Namespace,
   type Program,
   type Scalar,
@@ -230,6 +233,9 @@ export function modelBaseType(
  * @param type - A named type (Model, Enum, Union, or Scalar) to represent.
  * @param visited - Accumulator for cycle detection; pass `new Set()` at the call site.
  * @param visibilityFilter - Optional HTTP visibility to filter model properties.
+ * @param property - The model property this type occurrence came from, if any.
+ *   Used to resolve `@encode` applied directly on the property (as opposed to
+ *   on the scalar's declaration) — see {@link scalarPlaceholder}.
  * @returns A JSON-serializable value (object, string, number, boolean, or array).
  */
 export function jsonRepresentationForType(
@@ -237,6 +243,7 @@ export function jsonRepresentationForType(
   type: Model | Enum | Union | Scalar,
   visited = new Set<Type>(),
   visibilityFilter?: Visibility,
+  property?: ModelProperty,
 ): unknown {
   if (visited.has(type)) {
     // Cycle detected — substitute the type name to break the recursion.
@@ -260,6 +267,7 @@ export function jsonRepresentationForType(
           property.type,
           visited,
           visibilityFilter,
+          property,
         );
       }
       return jsonObject;
@@ -282,7 +290,7 @@ export function jsonRepresentationForType(
         : (type.name ?? "union");
     }
     case "Scalar":
-      return scalarPlaceholder(type);
+      return scalarPlaceholder(program, type, property);
   }
 }
 
@@ -298,6 +306,9 @@ export function jsonRepresentationForType(
  * @param type - Any TypeSpec type.
  * @param visited - Accumulator for cycle detection.
  * @param visibilityFilter - Optional HTTP visibility to filter model properties.
+ * @param property - The model property this type occurrence came from, if any.
+ *   Used to resolve `@encode(string)` on boolean properties so the placeholder
+ *   value reflects the actual wire representation.
  * @returns A JSON-serializable value.
  */
 export function jsonValueForType(
@@ -305,6 +316,7 @@ export function jsonValueForType(
   type: Type,
   visited: Set<Type>,
   visibilityFilter?: Visibility,
+  property?: ModelProperty,
 ): unknown {
   switch (type.kind) {
     case "String":
@@ -312,7 +324,9 @@ export function jsonValueForType(
     case "Number":
       return type.value;
     case "Boolean":
-      return type.value;
+      return isBooleanEncodedAsString(program, property)
+        ? String(type.value)
+        : type.value;
     case "Tuple":
       return type.values.map((value) =>
         jsonValueForType(program, value, visited, visibilityFilter),
@@ -359,6 +373,7 @@ export function jsonValueForType(
         type,
         new Set(visited),
         visibilityFilter,
+        property,
       );
     default:
       return typeReference(program, type);
@@ -366,22 +381,100 @@ export function jsonValueForType(
 }
 
 /**
+ * Resolves the effective `@encode` data for a boolean-typed property or scalar.
+ *
+ * Checks the property itself first (`@encode(string) active: boolean;`), then
+ * falls back to the property's scalar type declaration
+ * (`@encode(string) scalar MyBool extends boolean;`).
+ *
+ * @param program - The TypeSpec program.
+ * @param property - The model property to inspect, if available.
+ */
+function resolveBooleanEncode(
+  program: Program,
+  property?: ModelProperty,
+): EncodeData | undefined {
+  if (!property) {
+    return undefined;
+  }
+  return (
+    getEncode(program, property) ??
+    (property.type.kind === "Scalar"
+      ? getEncode(program, property.type)
+      : undefined)
+  );
+}
+
+/**
+ * Returns `true` when the resolved `@encode` data represents a boolean
+ * encoded as a string (`@encode(string)` on a `boolean`).
+ *
+ * `@encode(string)` on a boolean produces `EncodeData` whose `type` is the
+ * `string` scalar and whose `encoding` is left `undefined` — so this checks
+ * both `encoding === "string"` and whether `encode.type` resolves to `string`.
+ *
+ * @param program - The TypeSpec program.
+ * @param property - The model property to inspect, if available.
+ */
+function isBooleanEncodedAsString(
+  program: Program,
+  property?: ModelProperty,
+): boolean {
+  return encodesAsString(resolveBooleanEncode(program, property));
+}
+
+/**
+ * Determines whether an {@link EncodeData} resolution represents a
+ * string-encoded value, either via an explicit `encoding: "string"` or by the
+ * `type` field resolving to the built-in `string` scalar.
+ *
+ * @param encode - The resolved encode data, or `undefined` when no `@encode` applies.
+ */
+function encodesAsString(encode: EncodeData | undefined): boolean {
+  if (!encode) {
+    return false;
+  }
+  if (encode.encoding === "string") {
+    return true;
+  }
+  let current: Scalar | undefined = encode.type;
+  while (current) {
+    if (current.name === "string") {
+      return true;
+    }
+    current = current.baseScalar;
+  }
+  return false;
+}
+
+/**
  * Returns a representative primitive placeholder value for a TypeSpec scalar.
  *
  * Walks the scalar's inheritance chain looking for a known built-in base name:
  * - `"string"` or any derived scalar → `"string"`
- * - `"boolean"` → `true`
+ * - `"boolean"` → `true`, or the string `"true"` when `@encode(string)`
+ *   applies (checked on `property` first, then on `type` itself)
  * - Numeric families (`int*`, `uint*`, `float*`, `numeric`) → `0`
  *
  * Falls back to the scalar's own name when no built-in is found.
  *
+ * @param program - The TypeSpec program.
  * @param type - The scalar type to generate a placeholder for.
+ * @param property - The model property this scalar occurrence came from, if any.
  */
-export function scalarPlaceholder(type: Scalar): unknown {
+export function scalarPlaceholder(
+  program: Program,
+  type: Scalar,
+  property?: ModelProperty,
+): unknown {
   let current: Scalar | undefined = type;
   while (current) {
     if (current.name === "string") return "string";
-    if (current.name === "boolean") return true;
+    if (current.name === "boolean") {
+      const encode =
+        resolveBooleanEncode(program, property) ?? getEncode(program, type);
+      return encodesAsString(encode) ? "true" : true;
+    }
     if (
       current.name.startsWith("int") ||
       current.name.startsWith("uint") ||

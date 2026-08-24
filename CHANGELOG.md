@@ -7,6 +7,28 @@ This project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- Operation pages now render `@errors` doc-comment content under a new "## Errors" heading, sourced via `getErrorsDoc` from `@typespec/compiler`. Previously the operation page model always hard-coded `errorsDoc: undefined`, so the `@errors` tag was silently ignored.
+- `@encode(string)` on a `boolean` model property is now reflected in generated example JSON: the property renders as the wire-level string `"true"`/`"false"` instead of a native JSON boolean, matching how `@massivescale/tsp-aspnetcore-api`, `@massivescale/tsp-refit-client`, and `@massivescale/tsp-ts-client-models` already handle this encoding. Plain `boolean` properties are unaffected.
+- New `tsp-api-docs/missing-errors-doc` linter rule (in `recommended` and `all` rule sets): flags an operation that can return an error response — a status code `>= 400`, or a response body typed with `@error` — but has no `@errors` doc-comment tag. Reports once per operation.
+
+### Fixed
+
+- "## Response headers" on operation pages now renders unconditionally, matching every other section in the operation template. It was previously nested inside the `{{#if errorsDoc}}` block alongside "## Errors", so — since `errorsDoc` was always `undefined` before this release — response headers never rendered on any generated operation page.
+
+### Changed
+
+- Upgraded the supported TypeSpec toolchain to the 1.15.0 release train: `@typespec/compiler` and `@typespec/http` to `^1.15.0`, and `@typespec/versioning` to `^0.85.0`.
+
+### Removed
+
+- **Breaking (tooling):** Removed the `./testing` package export and the `TspApiDocsTestLibrary` it exposed. It relied on `createTestLibrary`/`TypeSpecTestLibrary`. Consumers writing tests against this emitter should use `createTester` from `@typespec/compiler/testing` directly (see `test/emitter.test.js` for the pattern).
+
+---
+
 ## [v1.0.0-beta2] — DocFx Improvements
 
 ### Added

@@ -1,6 +1,7 @@
 import {
   getDeprecated,
   getDoc,
+  getErrorsDoc,
   getReturnsDoc,
   getSummary,
   walkPropertiesInherited,
@@ -131,7 +132,7 @@ export interface OperationPageModel {
   responseHeaders: HttpParameterDoc[];
   /** Text from `@returns` on the operation, if present. */
   returnsDoc?: string;
-  /** Reserved for future `@errors` decorator support. Always `undefined`. */
+  /** Doc-comment content from the operation's `@errors` tag, if present. */
   errorsDoc?: string;
   /** One or more code examples (from `@opExample` or synthetically generated). */
   examples: OperationExampleDoc[];
@@ -198,7 +199,7 @@ export function buildOperationPage(
     responses: buildResponseDocs(program, operation, httpOperation, makeRef),
     responseHeaders: buildResponseHeaderDocs(program, httpOperation, makeRef),
     returnsDoc: getReturnsDoc(program, operation),
-    errorsDoc: undefined,
+    errorsDoc: getErrorsDoc(program, operation),
     examples: operationExamples(program, operation, httpOperation, routePrefix),
   };
 }

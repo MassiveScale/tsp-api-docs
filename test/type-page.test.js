@@ -117,4 +117,43 @@ describe("type page", () => {
       result.outputs["error-test-api/resources/ErrorResponse.md"];
     assert.ok(!errorPage.includes("## Methods"));
   });
+
+  it("renders a plain boolean property as a native boolean in the example JSON", async () => {
+    const result = await tester.emit("@massivescale/tsp-api-docs").compile(`
+      @service(#{ title: "Encode API" })
+      namespace Demo;
+
+      model Widget {
+        id: string;
+        active: boolean;
+      }
+
+      interface Widgets {
+        op read(id: string): Widget;
+      }
+    `);
+
+    const widgetPage = result.outputs["encode-api/resources/Widget.md"];
+    assert.ok(widgetPage.includes('"active": true'));
+  });
+
+  it("renders an @encode(string) boolean property as a wire-level string in the example JSON", async () => {
+    const result = await tester.emit("@massivescale/tsp-api-docs").compile(`
+      @service(#{ title: "Encode API" })
+      namespace Demo;
+
+      model Widget {
+        id: string;
+        @encode(string)
+        active: boolean;
+      }
+
+      interface Widgets {
+        op read(id: string): Widget;
+      }
+    `);
+
+    const widgetPage = result.outputs["encode-api/resources/Widget.md"];
+    assert.ok(widgetPage.includes('"active": "true"'));
+  });
 });

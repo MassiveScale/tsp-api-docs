@@ -42,6 +42,7 @@ const widgetSource = `
   @summary("Return a widget by id.")
   @doc("Reads a single widget resource.")
   @returnsDoc("The requested widget.")
+  @errorsDoc("Returns an error if the widget id does not exist.")
   op getWidget(@doc("The widget identifier.") id: string): Widget;
 `;
 
@@ -238,6 +239,12 @@ describe("service entry", () => {
       assert.ok(
         result.outputs["my-awesome-api/resources/Widget.md"] !== undefined,
         "type file should be under api-name folder",
+      );
+      assert.ok(
+        result.outputs["my-awesome-api/api/Get-Widget.md"].includes(
+          "## Errors",
+        ),
+        "operation file should render @errorsDoc content",
       );
       assert.equal(
         result.outputs["widget-api.md"],
