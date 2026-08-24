@@ -160,9 +160,40 @@ export function escapeMarkdownCell(value: string): string {
 }
 
 /**
+ * Escapes characters that would break Markdown link text (the `[...]` portion
+ * of an inline link): backslashes and square brackets.
+ *
+ * @param value - The raw link text.
+ * @returns A string safe to embed inside a Markdown link's `[...]` segment.
+ */
+export function escapeMarkdownLinkText(value: string): string {
+  return value
+    .replace(/\\/gu, "\\\\")
+    .replace(/\[/gu, "\\[")
+    .replace(/\]/gu, "\\]");
+}
+
+/**
+ * Escapes characters that would break a Markdown link destination (the
+ * `(...)` portion of an inline link): backslashes and parentheses, which
+ * would otherwise prematurely close the destination.
+ *
+ * @param value - The raw URL.
+ * @returns A string safe to embed inside a Markdown link's `(...)` segment.
+ */
+export function escapeMarkdownLinkUrl(value: string): string {
+  return value
+    .replace(/\\/gu, "\\\\")
+    .replace(/\(/gu, "\\(")
+    .replace(/\)/gu, "\\)");
+}
+
+/**
  * Renders `@externalDocs` on `entity` as a single Markdown link, or `undefined`
  * if the decorator isn't present. Uses the description as the link text when
- * given, falling back to the bare URL otherwise.
+ * given, falling back to the bare URL otherwise. Both the link text and the
+ * URL are escaped so that Markdown-significant characters (`[`, `]`, `(`, `)`)
+ * in either produce a well-formed link.
  *
  * @param program - The TypeSpec program.
  * @param entity - The type or namespace to inspect for `@externalDocs`.
@@ -175,7 +206,7 @@ export function formatExternalDocsLink(
   const externalDocs = getExternalDocs(program, entity);
   if (!externalDocs) return undefined;
   const label = externalDocs.description ?? externalDocs.url;
-  return `[${label}](${externalDocs.url})`;
+  return `[${escapeMarkdownLinkText(label)}](${escapeMarkdownLinkUrl(externalDocs.url)})`;
 }
 
 /**

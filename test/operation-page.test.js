@@ -106,7 +106,7 @@ describe("operation page", () => {
     assert.ok(operationPage.includes("GET /api/widgets/string?expand=string"));
     assert.ok(operationPage.includes("ConsistencyLevel: string"));
     // Regression test: "## Response headers" must render regardless of
-    // whether the operation has an @errors doc — it was previously nested
+    // whether the operation has an @errorsDoc — it was previously nested
     // inside the {{#if errorsDoc}} block and never rendered for any operation.
     assert.ok(operationPage.includes("## Response headers"));
     assert.ok(

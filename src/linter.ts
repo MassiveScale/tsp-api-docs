@@ -8,6 +8,7 @@
 import { defineLinter } from "@typespec/compiler";
 import { missingErrorsDocRule } from "./rules/missing-errors-doc.js";
 
+/** The TypeSpec linter registration for `tsp-api-docs`, exposing its rules and rule sets. */
 export const $linter = defineLinter({
   rules: [missingErrorsDocRule],
   ruleSets: {

@@ -2,7 +2,7 @@
  * Tests for src/rules/missing-errors-doc.ts — the `tsp-api-docs/missing-errors-doc`
  * linter rule, which flags an operation that can return an error response
  * (>=400 status code, or an `@error`-decorated response body) but has no
- * `@errors` doc-comment tag.
+ * `@errorsDoc` doc-comment tag.
  */
 import { describe, it } from "node:test";
 import { resolvePath } from "@typespec/compiler";
@@ -21,7 +21,7 @@ const tester = createTester(
 );
 
 describe("missing-errors-doc", () => {
-  it("flags an operation with a numeric error status code and no @errors doc", async () => {
+  it("flags an operation with a numeric error status code and no @errorsDoc", async () => {
     const runner = await tester.createInstance();
     const ruleTester = createLinterRuleTester(
       runner,
@@ -43,7 +43,7 @@ describe("missing-errors-doc", () => {
       .toEmitDiagnostics({ code: "tsp-api-docs/missing-errors-doc" });
   });
 
-  it("flags an operation with an @error-decorated response body and no @errors doc", async () => {
+  it("flags an operation with an @error-decorated response body and no @errorsDoc", async () => {
     const runner = await tester.createInstance();
     const ruleTester = createLinterRuleTester(
       runner,
@@ -63,6 +63,30 @@ describe("missing-errors-doc", () => {
 
       @route("/widgets/{id}")
       op getWidget(@path id: string): { @statusCode statusCode: 200; } | NotFoundError;
+    `,
+      )
+      .toEmitDiagnostics({ code: "tsp-api-docs/missing-errors-doc" });
+  });
+
+  it("flags an operation with a status-code range that overlaps but does not start in the error range", async () => {
+    const runner = await tester.createInstance();
+    const ruleTester = createLinterRuleTester(
+      runner,
+      missingErrorsDocRule,
+      "tsp-api-docs",
+    );
+    await ruleTester
+      .expect(
+        `
+      import "@typespec/http";
+      using Http;
+
+      @route("/widgets/{id}")
+      op getWidget(@path id: string): {
+        @minValue(300)
+        @maxValue(499)
+        @statusCode statusCode: int32;
+      };
     `,
       )
       .toEmitDiagnostics({ code: "tsp-api-docs/missing-errors-doc" });

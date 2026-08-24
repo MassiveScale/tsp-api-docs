@@ -133,7 +133,7 @@ export interface OperationPageModel {
   responseHeaders: HttpParameterDoc[];
   /** Text from `@returns` on the operation, if present. */
   returnsDoc?: string;
-  /** Doc-comment content from the operation's `@errors` tag, if present. */
+  /** Doc-comment content from the operation's `@errorsDoc` tag, if present. */
   errorsDoc?: string;
   /** Markdown link rendered from `@externalDocs` on the operation, if present. */
   externalDocs?: string;

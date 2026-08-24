@@ -330,5 +330,32 @@ describe("type page", () => {
         ),
       );
     });
+
+    it("escapes Markdown-significant characters in the description and URL", async () => {
+      const result = await openApiTester.emit("@massivescale/tsp-api-docs")
+        .compile(`
+        using OpenAPI;
+
+        @service(#{ title: "Widget API" })
+        namespace Demo;
+
+        @externalDocs("https://example.com/docs(v2)", "Reference [full]")
+        model Widget {
+          id: string;
+        }
+
+        interface Widgets {
+          op read(id: string): Widget;
+        }
+      `);
+
+      const widgetPage = result.outputs["widget-api/resources/Widget.md"];
+      assert.ok(widgetPage.includes("## External documentation"));
+      assert.ok(
+        widgetPage.includes(
+          "[Reference \\[full\\]](https://example.com/docs\\(v2\\))",
+        ),
+      );
+    });
   });
 });
