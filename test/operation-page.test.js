@@ -321,9 +321,7 @@ describe("operation page", () => {
 
       const page = result.outputs["widget-api/api/Widgets-Read.md"];
       assert.ok(page.includes("## External documentation"));
-      assert.ok(
-        page.includes("[Full reference](https://example.com/docs)"),
-      );
+      assert.ok(page.includes("[Full reference](https://example.com/docs)"));
     });
 
     it("falls back to the bare URL as link text when no description is given", async () => {
@@ -347,9 +345,7 @@ describe("operation page", () => {
       const page = result.outputs["widget-api/api/Widgets-Read.md"];
       assert.ok(page.includes("## External documentation"));
       assert.ok(
-        page.includes(
-          "[https://example.com/docs](https://example.com/docs)",
-        ),
+        page.includes("[https://example.com/docs](https://example.com/docs)"),
       );
     });
 
