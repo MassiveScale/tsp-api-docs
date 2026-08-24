@@ -31,7 +31,7 @@ This project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
-## [v1.0.0-beta2] — DocFx Improvements
+## [v1.0.0-beta3] — DocFx Improvements
 
 ### Added
 
