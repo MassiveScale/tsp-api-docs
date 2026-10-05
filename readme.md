@@ -10,7 +10,7 @@ Supports multiple output formats targeting Azure DevOps Wiki, GitHub, and DocFx.
 
 ## Features
 
-- Emits Markdown docs with per-service overview pages, per-operation pages, and per-type pages (models, enums, unions, scalars).
+- Emits Markdown docs with per-service overview pages, per-operation pages, and per-type pages (models, enums, unions, scalars). Type pages cover payload data only — response models and metadata-only models are documented on operation pages instead. See [Which types get pages](#which-types-get-pages).
 - Three output formats: `azure-devops` (default), `github`, and `docfx`.
 - Automatically formats Markdown tables with aligned columns.
 - External Handlebars templates — override any built-in template with a custom `.hbs` file.
@@ -18,10 +18,11 @@ Supports multiple output formats targeting Azure DevOps Wiki, GitHub, and DocFx.
 - Versioned API support via `@typespec/versioning`.
 - Optional `api-name` prefix for versioned file/folder slugs (e.g. `my-api-v1-0/`).
 - Configurable `route-prefix` with `{version}` token substitution for HTTP request lines (default: `api/{version}`).
-- Response headers documented per operation.
+- Response headers documented per status code, and included in example responses.
+- Query, header, path, and cookie parameters documented by their HTTP wire names (e.g. `$expand`, `If-Match`).
 - Request body examples automatically omit read-only and immutable properties based on HTTP verb visibility.
 - Type names rendered exactly as defined — no CamelCase splitting in page titles.
-- Related-methods table on type pages lists only operations that directly address the type — return it, accept it as a parameter, or use a direct array/record/union of it. Operations that reference the type only through nested properties are excluded, except for one-level wrapper request models that are direct operation parameters (e.g. `CreateWidgetRequest { widget: Widget }`). Types decorated with `@error` are never treated as addressable entities and have no Methods section.
+- Related-methods table on type pages lists only operations that directly address the type — return it (including through a response model such as `EntityResponse<Widget>`), accept it as a parameter or body (including through `MergePatchUpdate<Widget>`), or use a direct array/record/union of it. Operations that reference the type only through nested properties are excluded, except for one-level wrapper request models that are direct operation parameters (e.g. `CreateWidgetRequest { widget: Widget }`). Types decorated with `@error` are never treated as addressable entities and have no Methods section.
 - DocFx `toc.yml` output is YAML-safe — service and page titles containing colons or other special characters are properly quoted.
 
 ## Requirements
@@ -112,6 +113,53 @@ options:
 | `enable-pdf-toc-page` | `boolean`  | `true`                  | Sets `globalMetadata.pdfTocPage` in `docfx.json`, enabling a PDF table-of-contents page.         |
 | `theme`               | `string[]` | `["default", "modern"]` | Template names applied to the `build.template` array in `docfx.json`.                            |
 
+## Which types get pages
+
+A type page (and a row in the Types index) describes **data**: something a client sends or receives as an HTTP body. The emitter decides this by asking `@typespec/http` how each operation's request and response bodies resolve, rather than documenting every model in the namespace. This is the same rule `@massivescale/tsp-aspnetcore-api` uses to decide which models get a C# class, and it matches how `@typespec/openapi3` builds schemas.
+
+TypeSpec calls `@statusCode`, `@header`, `@cookie`, `@query`, and `@path` properties [metadata](https://typespec.io/docs/libraries/http/operations/). Two kinds of model describe HTTP details rather than data:
+
+- A **metadata-only model** has only metadata properties, e.g. `model ETagHeader { @header("ETag") etag: string; }`, `model UpdatedResponse { ...NoContentResponse; ...ETagHeader; }`, or a spread parameter model like `model IfMatchHeader { @header("If-Match") ifMatch?: string; }`. It **never gets a type page**. Its properties show up on the operation pages that use it, as request headers, response headers, or parameters.
+- A **response model** is used as an operation's return type and carries metadata. Only its body is data:
+  - **Explicit body.** With an `@body` or `@bodyRoot` property (`model EntityResponse<T> { ...OkResponse; ...ETagHeader; @body body: T; }`, or `@error model NotFoundError { ...NotFoundResponse; @body body: Error; }`), the response model **gets no type page**. Its body type (`T`, `Error`) does. The response model's `@doc` still appears as that status code's description on the operation page.
+  - **Implicit body.** If a response model mixes metadata with plain properties and has no `@body`, the plain properties form the body. The model **gets a type page** that lists only those plain properties.
+
+```typespec
+model WidgetResult {
+  @header("ETag") etag: string; // metadata: shown as a response header on the operation page
+  name: string;                 // body: shown on the WidgetResult type page
+}
+
+@get read(): WidgetResult;
+```
+
+Metadata never appears in a type's property table, JSON representation, or relation diagram entry, wherever the model is used. Specifically, `@header`, `@cookie`, and `@statusCode` properties are left out, as are properties typed as a metadata-only or explicit-body response model. `@path` and `@query` properties stay, because on a returned resource (`model Widget { @path id: string; ... }`) they are ordinary body data.
+
+### Reachability
+
+When the service has HTTP operations, a model, union, or scalar gets a page only if an operation reaches it:
+
+- a request body, a response body (as resolved above), or a parameter type;
+- transitively, a property type, base model, array/record element, union variant, or `MergePatchUpdate<T>` source of one of those;
+- every derived model of a reachable `@discriminator` base. A derived model that is itself a response model (e.g. `model OddPet extends Pet { kind: "odd"; @body body: Toy; }`) still gets no page.
+
+Enums always get a page, whether or not an operation uses them. Templated models (`EntityResponse<T>`) never get their own page; their body types do.
+
+If a base model is metadata-only, a derived model's "Base type" points at the nearest base that does have a page (or is omitted).
+
+When the service has **no** HTTP operations (a models-only library), every named model, enum, union, and scalar in the namespace gets a page, except metadata-only models and explicit-body response models.
+
+## Operation pages
+
+Each operation page documents the HTTP request and every response:
+
+- **HTTP request** — the verb and URI template, with the route prefix applied. Percent-encoded names are decoded so the line reads the way a client types it (`{?$expand}` rather than `{?%24expand}`).
+- **Path parameters**, **Optional query parameters**, **Request headers**, and **Request cookies** — one table each, using the wire name from `@path`, `@query`, `@header`, or `@cookie` (e.g. `$expand`, `If-Match`), not the TypeSpec property name. Empty path and cookie sections are omitted. Operations without HTTP metadata get a single **Parameters** table instead.
+- **Request body** — the body type, content types, and a JSON example.
+- **Response** — what the caller receives on success (the 2xx body types, or `void`), followed by one row per status code with its body type and description. Status codes show their standard reason phrase (e.g. `409 Conflict`, `412 Precondition Failed`).
+- **Response headers** — one table per status code that returns headers (name, type, required, summary).
+- **Examples** — from `@opExample`, or generated from the HTTP metadata. Example requests use wire names (`?$expand=string`), and example responses include response headers (`ETag: string`). When an `@opExample` return value is a response model, its `@body` value becomes the JSON body and its header values become the header lines.
+
 ## Output Formats
 
 ### `azure-devops` (default)
@@ -189,7 +237,7 @@ options:
 
 ### Relation Diagram
 
-When `emit-relation-diagram: true`, a `relation-diagram.md` file is emitted in each service folder. It contains a Mermaid `erDiagram` block that shows all emitted types and their relationships:
+When `emit-relation-diagram: true`, a `relation-diagram.md` file is emitted in each service folder. It contains a Mermaid `erDiagram` block that shows every type that has a page (see [Which types get pages](#which-types-get-pages)) and their relationships:
 
 ```yaml
 options:
@@ -315,6 +363,8 @@ All templates receive the standard view model for their page type. The following
 | `apiName`      | The full `api-name`-prefixed label (e.g. `"My Awesome API v1.0"`). `undefined` when not configured. |
 
 Refer to the built-in templates in `templates/` for the full variable list for each page type.
+
+The `operation` template also receives `pathParameters`, `optionalQueryParameters`, `requestHeaders`, and `requestCookies` (each a list of `name`/`type`/`requiredLabel`/`summaryOrFallback`, keyed by wire name), `parameters` (every TypeSpec parameter by TypeSpec name), and `responses`, where each response has `statusCode`, `type`, `description`, and `headers`. `responseHeaders` lists every response header across all status codes.
 
 ## Contributing
 

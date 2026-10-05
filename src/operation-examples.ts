@@ -4,6 +4,7 @@ import {
   getSummary,
   getTypeName,
   serializeValueAsJson,
+  walkPropertiesInherited,
   type Example,
   type OpExample,
   type Operation,
@@ -11,6 +12,7 @@ import {
   type Type,
 } from "@typespec/compiler";
 import {
+  isMetadata,
   resolveRequestVisibility,
   type HttpOperation,
   type HttpOperationResponse,
@@ -22,6 +24,7 @@ import {
   asRecord,
   formatStatusCode,
   isSuccessStatusCode,
+  readableUriTemplate,
 } from "./utils.js";
 
 /**
@@ -307,7 +310,9 @@ function buildHttpRequestExample(
  * Builds the multi-line HTTP response example string.
  *
  * Picks the primary success response (falling back to the first response).
- * Returns `undefined` when no responses are defined or the response has no body.
+ * Response headers are listed after the status line, using sample values (or
+ * the `@opExample` values when present). Returns `undefined` when no responses
+ * are defined.
  *
  * @param program - The TypeSpec program.
  * @param httpOperation - The resolved HTTP operation, or `undefined`.
@@ -330,9 +335,22 @@ function buildHttpResponseExample(
   }
 
   const content = response.responses[0];
+  const example =
+    responseValue === undefined
+      ? undefined
+      : splitResponseExampleValue(program, response, content, responseValue);
   const inferredValue =
-    responseValue ?? inferResponseBodyValue(program, content);
+    example === undefined
+      ? inferResponseBodyValue(program, content)
+      : example.body;
   const lines = [`HTTP/1.1 ${formatStatusCode(response.statusCodes)}`];
+
+  for (const [name, property] of Object.entries(content?.headers ?? {})) {
+    const value =
+      example?.headers[property.name] ??
+      sampleValueForType(program, property.type);
+    lines.push(`${name}: ${formatHeaderValue(value)}`);
+  }
 
   if (inferredValue !== undefined) {
     lines.push(
@@ -346,14 +364,122 @@ function buildHttpResponseExample(
 }
 
 /**
+ * The parts of an `@opExample` return value that belong to one HTTP response.
+ */
+interface ResponseExampleParts {
+  /** The JSON body value, or `undefined` when the response has no body. */
+  body: unknown;
+  /** Header values keyed by the TypeSpec property name of each header. */
+  headers: Record<string, unknown>;
+}
+
+/**
+ * Splits an `@opExample` return value into its response body and headers.
+ *
+ * An example for a response model (e.g. `EntityResponse<Widget>`) holds the
+ * whole model: status code, headers and body. Only the body belongs in the
+ * JSON payload. When the response has an explicit `@body` / `@bodyRoot`, its
+ * value is used as the body. Otherwise metadata properties are removed and the
+ * remaining properties form the body.
+ *
+ * @param program - The TypeSpec program.
+ * @param response - The HTTP response the example is rendered for.
+ * @param content - The response content entry the example is rendered for.
+ * @param value - The serialized `@opExample` return value.
+ */
+function splitResponseExampleValue(
+  program: Program,
+  response: HttpOperationResponse,
+  content: HttpOperationResponse["responses"][number] | undefined,
+  value: unknown,
+): ResponseExampleParts {
+  const record = asRecord(value);
+  if (!record || response.type.kind !== "Model") {
+    return { body: value, headers: {} };
+  }
+
+  const headers: Record<string, unknown> = {};
+  for (const property of Object.values(content?.headers ?? {})) {
+    if (record[property.name] !== undefined) {
+      headers[property.name] = record[property.name];
+    }
+  }
+
+  const bodyProperty = content?.body?.property;
+  if (bodyProperty && bodyProperty.name in record) {
+    return { body: record[bodyProperty.name], headers };
+  }
+
+  const metadataNames = new Set(
+    [...walkPropertiesInherited(response.type)]
+      .filter((property) => isMetadata(program, property))
+      .map((property) => property.name),
+  );
+  if (metadataNames.size === 0) {
+    return { body: value, headers };
+  }
+
+  const body = Object.fromEntries(
+    Object.entries(record).filter(([name]) => !metadataNames.has(name)),
+  );
+  return {
+    body: content?.body && Object.keys(body).length > 0 ? body : undefined,
+    headers,
+  };
+}
+
+/**
+ * Formats a sample value for an HTTP header line. Arrays use the
+ * comma-separated form HTTP uses for list-valued headers.
+ *
+ * @param value - The sample value.
+ */
+function formatHeaderValue(value: unknown): string {
+  return Array.isArray(value) ? value.map(String).join(",") : String(value);
+}
+
+/**
+ * Percent-encodes a query parameter name, leaving `$` readable because RFC
+ * 3986 allows it in a query and OData-style names (`$expand`) rely on it.
+ *
+ * @param name - The query parameter wire name.
+ */
+function encodeQueryName(name: string): string {
+  return encodeURIComponent(name).replace(/%24/g, "$");
+}
+
+/**
+ * Builds the `name=value` entries for one query parameter. An array value is
+ * repeated per item when `explode` is set, otherwise comma-separated.
+ *
+ * @param name - The query parameter wire name.
+ * @param value - The sample value.
+ * @param explode - Whether the parameter uses exploded (repeated) form.
+ */
+function queryEntriesFor(
+  name: string,
+  value: unknown,
+  explode: boolean,
+): string[] {
+  const encodedName = encodeQueryName(name);
+  if (!Array.isArray(value)) {
+    return [`${encodedName}=${encodeURIComponent(String(value))}`];
+  }
+  const items = value.map((item) => encodeURIComponent(String(item)));
+  return explode
+    ? items.map((item) => `${encodedName}=${item}`)
+    : [`${encodedName}=${items.join(",")}`];
+}
+
+/**
  * Formats the first line of the HTTP request example (verb + path).
  *
  * Path parameters are substituted with percent-encoded sample values.
- * Query parameters are appended as a query string.
+ * Query parameters are appended as a query string, using their wire names.
  * Unresolved URI template expressions (e.g. `{?filter}`) are stripped.
  *
  * @param httpOperation - The resolved HTTP operation.
- * @param parameterValues - Resolved sample values keyed by parameter name.
+ * @param parameterValues - Resolved sample values keyed by TypeSpec parameter name.
  * @param routePrefix - Optional route prefix.
  */
 function formatHttpRequestExampleLine(
@@ -361,9 +487,10 @@ function formatHttpRequestExampleLine(
   parameterValues?: Record<string, unknown>,
   routePrefix?: string,
 ): string {
+  const uriTemplate = readableUriTemplate(httpOperation.uriTemplate);
   let path = routePrefix
-    ? applyRoutePrefix(httpOperation.uriTemplate, routePrefix)
-    : httpOperation.uriTemplate;
+    ? applyRoutePrefix(uriTemplate, routePrefix)
+    : uriTemplate;
   const queryEntries: string[] = [];
 
   for (const parameter of httpOperation.parameters.parameters) {
@@ -373,21 +500,15 @@ function formatHttpRequestExampleLine(
     }
 
     if (parameter.type === "path") {
-      path = path.replaceAll(
-        `{${parameter.param.name}}`,
-        encodeURIComponent(String(value)),
-      );
-      path = path.replaceAll(
-        `{+${parameter.param.name}}`,
-        encodeURIComponent(String(value)),
-      );
+      const encoded = encodeURIComponent(String(value));
+      path = path.replaceAll(`{${parameter.name}}`, encoded);
+      path = path.replaceAll(`{+${parameter.name}}`, encoded);
       continue;
     }
 
     if (parameter.type === "query") {
-      const queryName = parameter.param.name;
       queryEntries.push(
-        `${encodeURIComponent(queryName)}=${encodeURIComponent(String(value))}`,
+        ...queryEntriesFor(parameter.name, value, parameter.explode),
       );
     }
   }
@@ -425,7 +546,7 @@ function buildRequestHeaderExampleLines(
       continue;
     }
 
-    headerLines.push(`${parameter.name}: ${String(value)}`);
+    headerLines.push(`${parameter.name}: ${formatHeaderValue(value)}`);
   }
 
   return headerLines;

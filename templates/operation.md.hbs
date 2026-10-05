@@ -23,6 +23,29 @@ Path: {{join breadcrumbs " > "}}
 {{httpRequest}}
 ```
 
+{{#if pathParameters.length}}
+## Path parameters
+
+| Name | Type | Required | Summary |
+| - | - | - | - |
+{{#each pathParameters}}
+| {{mdCell name}} | {{mdCell type}} | {{mdCell requiredLabel}} | {{mdCell summaryOrFallback}} |
+{{/each}}
+
+{{/if}}
+{{else}}
+## Parameters
+
+{{#if parameters.length}}
+| Name | Type | Required | Summary |
+| - | - | - | - |
+{{#each parameters}}
+| {{mdCell name}} | {{mdCell type}} | {{mdCell requiredLabel}} | {{mdCell summaryOrFallback}} |
+{{/each}}
+{{else}}
+This method does not declare request parameters.
+{{/if}}
+
 {{/if}}
 ## Optional query parameters
 
@@ -48,6 +71,16 @@ This method does not support query parameters.
 No custom request headers are required for this method.
 {{/if}}
 
+{{#if requestCookies.length}}
+## Request cookies
+
+| Name | Type | Required | Summary |
+| - | - | - | - |
+{{#each requestCookies}}
+| {{mdCell name}} | {{mdCell type}} | {{mdCell requiredLabel}} | {{mdCell summaryOrFallback}} |
+{{/each}}
+
+{{/if}}
 ## Request body
 
 {{#if requestBody}}
@@ -81,26 +114,20 @@ Don't supply a request body for this method.
 {{/each}}
 
 {{/if}}
-
-### Parameters
-
-{{#if parameters.length}}
-| Name | Type | Required | Summary |
-| - | - | - | - |
-{{#each parameters}}
-| {{mdCell name}} | {{mdCell type}} | {{mdCell requiredLabel}} | {{mdCell summaryOrFallback}} |
-{{/each}}
-{{else}}
-This method does not declare request parameters.
-{{/if}}
-
 ## Response headers
 
 {{#if responseHeaders.length}}
+{{#each responses}}
+{{#if headers.length}}
+### {{statusCode}}
+
 | Name | Type | Required | Summary |
 | - | - | - | - |
-{{#each responseHeaders}}
+{{#each headers}}
 | {{mdCell name}} | {{mdCell type}} | {{mdCell requiredLabel}} | {{mdCell summaryOrFallback}} |
+{{/each}}
+
+{{/if}}
 {{/each}}
 {{else}}
 This method does not return custom response headers.

@@ -332,7 +332,7 @@ export function breadcrumbsForType(
 /**
  * Formats an HTTP status code value as a human-readable string.
  *
- * - Numbers: `200` → `"200 OK"`, `999` → `"999"` (no label for unknown codes).
+ * - Numbers: `409` → `"409 Conflict"`, `999` → `"999"` (no label for unknown codes).
  * - Wildcard: `"*"` → `"default"`.
  * - Range: `{ start: 200, end: 299 }` → `"200-299"`.
  *
@@ -360,28 +360,97 @@ export function formatStatusCode(
  * @param statusCode - A numeric HTTP status code.
  */
 export function statusText(statusCode: number): string {
-  switch (statusCode) {
-    case 200:
-      return "OK";
-    case 201:
-      return "Created";
-    case 202:
-      return "Accepted";
-    case 204:
-      return "No Content";
-    case 400:
-      return "Bad Request";
-    case 401:
-      return "Unauthorized";
-    case 403:
-      return "Forbidden";
-    case 404:
-      return "Not Found";
-    case 500:
-      return "Internal Server Error";
-    default:
-      return "";
-  }
+  return STATUS_REASON_PHRASES[statusCode] ?? "";
+}
+
+/**
+ * Standard reason phrases for HTTP status codes registered with IANA
+ * (RFC 9110 and the RFCs that define the remaining codes).
+ */
+const STATUS_REASON_PHRASES: Readonly<Record<number, string>> = {
+  100: "Continue",
+  101: "Switching Protocols",
+  102: "Processing",
+  103: "Early Hints",
+  200: "OK",
+  201: "Created",
+  202: "Accepted",
+  203: "Non-Authoritative Information",
+  204: "No Content",
+  205: "Reset Content",
+  206: "Partial Content",
+  207: "Multi-Status",
+  208: "Already Reported",
+  226: "IM Used",
+  300: "Multiple Choices",
+  301: "Moved Permanently",
+  302: "Found",
+  303: "See Other",
+  304: "Not Modified",
+  305: "Use Proxy",
+  307: "Temporary Redirect",
+  308: "Permanent Redirect",
+  400: "Bad Request",
+  401: "Unauthorized",
+  402: "Payment Required",
+  403: "Forbidden",
+  404: "Not Found",
+  405: "Method Not Allowed",
+  406: "Not Acceptable",
+  407: "Proxy Authentication Required",
+  408: "Request Timeout",
+  409: "Conflict",
+  410: "Gone",
+  411: "Length Required",
+  412: "Precondition Failed",
+  413: "Content Too Large",
+  414: "URI Too Long",
+  415: "Unsupported Media Type",
+  416: "Range Not Satisfiable",
+  417: "Expectation Failed",
+  421: "Misdirected Request",
+  422: "Unprocessable Content",
+  423: "Locked",
+  424: "Failed Dependency",
+  425: "Too Early",
+  426: "Upgrade Required",
+  428: "Precondition Required",
+  429: "Too Many Requests",
+  431: "Request Header Fields Too Large",
+  451: "Unavailable For Legal Reasons",
+  500: "Internal Server Error",
+  501: "Not Implemented",
+  502: "Bad Gateway",
+  503: "Service Unavailable",
+  504: "Gateway Timeout",
+  505: "HTTP Version Not Supported",
+  506: "Variant Also Negotiates",
+  507: "Insufficient Storage",
+  508: "Loop Detected",
+  510: "Not Extended",
+  511: "Network Authentication Required",
+};
+
+/**
+ * Decodes percent-encoded variable names inside RFC 6570 URI template
+ * expressions so the template reads the way a client would type it.
+ *
+ * `@typespec/http` percent-encodes characters that are not allowed in a URI
+ * template variable name, so `@query(#{ name: "$expand" })` produces
+ * `{?%24expand}`. This returns `{?$expand}` instead. Text outside `{...}`
+ * expressions, and expressions that are not valid percent-encoding, are left
+ * unchanged.
+ *
+ * @param uriTemplate - The URI template from `HttpOperation.uriTemplate`.
+ */
+export function readableUriTemplate(uriTemplate: string): string {
+  return uriTemplate.replace(/\{[^}]*\}/g, (expression) => {
+    try {
+      return decodeURIComponent(expression);
+    } catch {
+      return expression;
+    }
+  });
 }
 
 /**
