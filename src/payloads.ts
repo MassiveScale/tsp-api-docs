@@ -131,25 +131,34 @@ export function isEnvelopeProperty(
  *
  * @param program - The TypeSpec program.
  * @param type - The property type to inspect.
+ * @param visited - Types already inspected on this path. Guards against
+ *   recursive types such as `union Json { string, Json[] }`.
  */
-function referencesEnvelopeModel(program: Program, type: Type): boolean {
+function referencesEnvelopeModel(
+  program: Program,
+  type: Type,
+  visited: Set<Type> = new Set(),
+): boolean {
+  if (visited.has(type)) return false;
+  visited.add(type);
+
   switch (type.kind) {
     case "Model":
       if (isArrayModelType(program, type) || isRecordModelType(program, type)) {
         return type.indexer
-          ? referencesEnvelopeModel(program, type.indexer.value)
+          ? referencesEnvelopeModel(program, type.indexer.value, visited)
           : false;
       }
       return Boolean(type.name) && isHttpEnvelopeModel(program, type);
     case "Union":
       return [...type.variants.values()].some((variant) =>
-        referencesEnvelopeModel(program, variant.type),
+        referencesEnvelopeModel(program, variant.type, visited),
       );
     case "UnionVariant":
-      return referencesEnvelopeModel(program, type.type);
+      return referencesEnvelopeModel(program, type.type, visited);
     case "Tuple":
       return type.values.some((value) =>
-        referencesEnvelopeModel(program, value),
+        referencesEnvelopeModel(program, value, visited),
       );
     default:
       return false;
@@ -307,6 +316,33 @@ function bodyTypes(body: HttpPayloadBody): Type[] {
 }
 
 /**
+ * Returns every type an HTTP operation sends or receives as a body: the
+ * request body and each response body, with multipart bodies flattened to
+ * their parts and implicit response bodies mapped back to their named
+ * response model (see {@link responsePayloadType}).
+ *
+ * @param httpOperation - The resolved HTTP operation.
+ */
+export function operationPayloadTypes(httpOperation: HttpOperation): Type[] {
+  const types: Type[] = [];
+  const requestBody = httpOperation.parameters.body;
+  if (requestBody) types.push(...bodyTypes(requestBody));
+
+  for (const response of httpOperation.responses) {
+    for (const content of response.responses) {
+      if (content.body?.bodyKind === "multipart") {
+        types.push(...bodyTypes(content.body));
+        continue;
+      }
+      const payload = responsePayloadType(response, content);
+      if (payload) types.push(payload);
+    }
+  }
+
+  return types;
+}
+
+/**
  * Selects the types that get a documentation page.
  *
  * When at least one operation resolves to an HTTP operation, a model, union or
@@ -421,15 +457,9 @@ export function selectDocumentedTypes<
     }
   };
 
-  // Walks a return type without HTTP metadata: a union of responses is not
-  // itself data, and an explicit-body response model contributes only its body.
-  const visitOperationType = (type: Type): void => {
-    if (type.kind === "Union") {
-      for (const variant of type.variants.values()) {
-        visitOperationType(variant.type);
-      }
-      return;
-    }
+  // Without HTTP metadata, an explicit-body model (as a parameter or a
+  // response) contributes only its body; the model itself is not data.
+  const visitPayloadOf = (type: Type): void => {
     if (type.kind === "Model" && type.name && hasExplicitBody(program, type)) {
       for (const property of walkPropertiesInherited(type)) {
         if (isBody(program, property) || isBodyRoot(program, property)) {
@@ -441,11 +471,22 @@ export function selectDocumentedTypes<
     visitType(type);
   };
 
+  // A union return type lists alternative responses, so it is not data itself.
+  const visitReturnType = (type: Type): void => {
+    if (type.kind === "Union") {
+      for (const variant of type.variants.values()) {
+        visitReturnType(variant.type);
+      }
+      return;
+    }
+    visitPayloadOf(type);
+  };
+
   for (const { operation, httpOperation } of operations) {
     if (!httpOperation) {
-      visitOperationType(operation.returnType);
+      visitReturnType(operation.returnType);
       for (const property of operation.parameters.properties.values()) {
-        visitType(property.type);
+        visitPayloadOf(property.type);
       }
       continue;
     }
@@ -453,21 +494,8 @@ export function selectDocumentedTypes<
     for (const parameter of httpOperation.parameters.parameters) {
       visitType(parameter.param.type);
     }
-    const requestBody = httpOperation.parameters.body;
-    if (requestBody) {
-      for (const type of bodyTypes(requestBody)) visitType(type);
-    }
-
-    for (const response of httpOperation.responses) {
-      for (const content of response.responses) {
-        if (!content.body) continue;
-        if (content.body.bodyKind === "multipart") {
-          for (const type of bodyTypes(content.body)) visitType(type);
-          continue;
-        }
-        const payload = responsePayloadType(response, content);
-        if (payload) visitType(payload);
-      }
+    for (const type of operationPayloadTypes(httpOperation)) {
+      visitType(type);
     }
   }
 

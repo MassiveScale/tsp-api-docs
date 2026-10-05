@@ -25,7 +25,7 @@ import {
 } from "./collect.js";
 import {
   isSameDeclaration,
-  responsePayloadType,
+  operationPayloadTypes,
   selectDocumentedTypes,
   unwrapMergePatch,
 } from "./payloads.js";
@@ -506,8 +506,8 @@ export function buildRelatedMethodsByType(
  *    has `widget: Widget`.
  * 4. When `httpOperation` is given, a request or response body resolved by
  *    `@typespec/http` directly references `target`. This covers types returned
- *    or accepted through a response model (`EntityResponse<Widget>`) and
- *    through `MergePatchUpdate<Widget>`.
+ *    or accepted through a response model (`EntityResponse<Widget>`), through
+ *    `MergePatchUpdate<Widget>`, and as an `HttpPart<Widget>` of a multipart body.
  *
  * `@error` types are always excluded: they appear on every operation that can
  * fail and listing them on a type page would be misleading.
@@ -533,16 +533,7 @@ export function operationUsesType(
   }
 
   if (httpOperation) {
-    const requestBody = httpOperation.parameters.body;
-    const bodyTypes = [
-      ...(requestBody ? [requestBody.type] : []),
-      ...httpOperation.responses.flatMap((response) =>
-        response.responses
-          .map((content) => responsePayloadType(response, content))
-          .filter((type): type is Type => type !== undefined),
-      ),
-    ];
-    for (const type of bodyTypes) {
+    for (const type of operationPayloadTypes(httpOperation)) {
       if (typeDirectlyReferencesTarget(program, type, target)) {
         return true;
       }

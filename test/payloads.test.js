@@ -409,6 +409,47 @@ describe("payload type selection", () => {
       "Doc",
       "Report",
     ]);
+
+    const doc = result.outputs["multipart-api/resources/Doc.md"];
+    assert.ok(doc.includes("[upload](../api/Files-Upload.md)"));
+    assert.ok(!doc.includes("Files-Download.md"));
+    const report = result.outputs["multipart-api/resources/Report.md"];
+    assert.ok(report.includes("[download](../api/Files-Download.md)"));
+    assert.ok(!report.includes("Files-Upload.md"));
+  });
+
+  it("handles recursive unions without overflowing the stack", async () => {
+    const result = await httpTester.emit("@massivescale/tsp-api-docs").compile(`
+      using Http;
+
+      @service(#{ title: "Json API" })
+      namespace Demo;
+
+      union JsonValue { string, JsonArray }
+      model JsonArray is Array<JsonValue>;
+
+      union Node { Branch, string }
+      model Branch is Array<Node>;
+
+      union DictValue { Dict, string }
+      model Dict is Record<DictValue>;
+
+      model Doc {
+        value: JsonValue;
+        tree?: Node;
+        dict?: DictValue;
+      }
+
+      @route("/docs")
+      interface Docs {
+        @get read(): Doc;
+      }
+    `);
+
+    const doc = result.outputs["json-api/resources/Doc.md"];
+    assert.match(doc, /\| value +\| \[JsonValue\]\(JsonValue\.md\) +\|/);
+    assert.match(doc, /\| tree +\| \[Node\]\(Node\.md\) +\|/);
+    assert.ok(result.outputs["json-api/resources/JsonValue.md"]);
   });
 
   it("walks TypeSpec types for an operation whose HTTP metadata has diagnostics", async () => {
@@ -426,18 +467,29 @@ describe("payload type selection", () => {
       model CookieResult { @cookie("session") session: string; label: string; }
       union Mode { "a", "b" }
       union Outcome { WidgetEnvelope, CookieResult }
+      model Gizmo { size: int32; }
+      model GizmoEnvelope { @header("x-trace") trace: string; @body body: Gizmo; }
       model Orphan { id: string; }
 
       @route("/ok") op ok(): Thing;
-      @route("/odd") op odd(@header("x-mode") mode: Mode): Outcome;
+      @route("/odd") op odd(
+        @header("x-mode") mode: Mode,
+        @bodyRoot request: GizmoEnvelope,
+      ): Outcome;
     `);
 
-    assert.deepEqual(
-      diagnostics.map((diagnostic) => diagnostic.code),
-      ["@typespec/http/response-cookie-not-supported"],
+    assert.ok(
+      diagnostics.every((diagnostic) => diagnostic.severity === "warning"),
+    );
+    assert.ok(
+      diagnostics.some(
+        (diagnostic) =>
+          diagnostic.code === "@typespec/http/response-cookie-not-supported",
+      ),
     );
     assert.deepEqual(resourcePages(result.outputs, "fallback-api"), [
       "CookieResult",
+      "Gizmo",
       "Mode",
       "Thing",
       "Widget",
@@ -706,6 +758,87 @@ describe("response headers", () => {
   });
 });
 
+describe("example responses", () => {
+  const statusSource = `
+    using Http;
+
+    @service(#{ title: "Status API" })
+    namespace Demo;
+
+    model Widget { id: string; }
+
+    @error
+    model Problem { title: string; }
+
+    model EntityResponse<T> {
+      ...OkResponse;
+      @header("ETag") etag: string;
+      @body body: T;
+    }
+
+    @error
+    model NotFoundError {
+      ...NotFoundResponse;
+      @body body: Problem;
+    }
+
+    @error
+    model ClientError {
+      @minValue(400) @maxValue(499) @statusCode code: int32;
+      @header("x-reason") reason: string;
+      @body body: Problem;
+    }
+
+    @route("/widgets")
+    interface Widgets {
+      @opExample(#{ returnType: #{ statusCode: 404, body: #{ title: "Missing" } } })
+      @get read(@path id: string): EntityResponse<Widget> | NotFoundError;
+
+      @opExample(#{ returnType: #{ code: 409, reason: "taken", body: #{ title: "Clash" } } })
+      @post create(@body body: Widget): EntityResponse<Widget> | ClientError;
+
+      @opExample(#{ returnType: #{ code: 500, reason: "boom", body: #{ title: "Boom" } } })
+      @delete remove(@path id: string): EntityResponse<Widget> | ClientError;
+    }
+  `;
+
+  it("renders the response whose status code the @opExample selects", async () => {
+    const result = await httpTester
+      .emit("@massivescale/tsp-api-docs")
+      .compile(statusSource);
+
+    const read = result.outputs["status-api/api/Widgets-Read.md"];
+    const response = read.slice(read.indexOf("#### Response"));
+    assert.ok(response.includes("HTTP/1.1 404 Not Found"));
+    assert.ok(response.includes('"title": "Missing"'));
+    assert.ok(!response.includes("ETag"));
+    assert.ok(!response.includes("HTTP/1.1 200 OK"));
+  });
+
+  it("matches a status code range and shows the example's exact code", async () => {
+    const result = await httpTester
+      .emit("@massivescale/tsp-api-docs")
+      .compile(statusSource);
+
+    const create = result.outputs["status-api/api/Widgets-Create.md"];
+    const response = create.slice(create.indexOf("#### Response"));
+    assert.ok(response.includes("HTTP/1.1 409 Conflict"));
+    assert.ok(response.includes("x-reason: taken"));
+    assert.ok(response.includes('"title": "Clash"'));
+    assert.ok(!response.includes('"code"'));
+  });
+
+  it("falls back to the primary response when no response accepts the example's status code", async () => {
+    const result = await httpTester
+      .emit("@massivescale/tsp-api-docs")
+      .compile(statusSource);
+
+    const remove = result.outputs["status-api/api/Widgets-Remove.md"];
+    const response = remove.slice(remove.indexOf("#### Response"));
+    assert.ok(response.includes("HTTP/1.1 200 OK"));
+  });
+});
+
 describe("query parameter wire names", () => {
   it("uses the wire name in the table, the example, and the URI template", async () => {
     const result = await httpTester
@@ -834,7 +967,28 @@ describe("utils", () => {
       readableUriTemplate("/a{?%24expand,%24top}"),
       "/a{?$expand,$top}",
     );
+    assert.equal(
+      readableUriTemplate("/a{?id%2Dlist,x%7Ey}"),
+      "/a{?id-list,x~y}",
+    );
     assert.equal(readableUriTemplate("/a%20b/{id}"), "/a%20b/{id}");
     assert.equal(readableUriTemplate("/a{?%E0%A4%A}"), "/a{?%E0%A4%A}");
+  });
+
+  it("keeps escapes that would change the meaning or syntax of the template", () => {
+    for (const escaped of [
+      "%2C",
+      "%26",
+      "%3D",
+      "%7D",
+      "%7B",
+      "%20",
+      "%3A",
+      "%25",
+      "%C3%A9",
+    ]) {
+      const template = `/a{?filter${escaped}sort}`;
+      assert.equal(readableUriTemplate(template), template, escaped);
+    }
   });
 });

@@ -437,20 +437,23 @@ const STATUS_REASON_PHRASES: Readonly<Record<number, string>> = {
  *
  * `@typespec/http` percent-encodes characters that are not allowed in a URI
  * template variable name, so `@query(#{ name: "$expand" })` produces
- * `{?%24expand}`. This returns `{?$expand}` instead. Text outside `{...}`
- * expressions, and expressions that are not valid percent-encoding, are left
- * unchanged.
+ * `{?%24expand}`. This returns `{?$expand}` instead.
+ *
+ * Only escapes for unreserved characters (`A-Z a-z 0-9 - . _ ~`) and `$` are
+ * decoded. Every other escape stays encoded, because decoding it could change
+ * how the template reads: `filter%2Csort` must not become `filter,sort` (two
+ * variables), and `%26`, `%3D`, `%7D` or `%20` would break the syntax. Text
+ * outside `{...}` expressions is left unchanged.
  *
  * @param uriTemplate - The URI template from `HttpOperation.uriTemplate`.
  */
 export function readableUriTemplate(uriTemplate: string): string {
-  return uriTemplate.replace(/\{[^}]*\}/g, (expression) => {
-    try {
-      return decodeURIComponent(expression);
-    } catch {
-      return expression;
-    }
-  });
+  return uriTemplate.replace(/\{[^}]*\}/g, (expression) =>
+    expression.replace(/%([0-9A-Fa-f]{2})/g, (escape, hex: string) => {
+      const character = String.fromCharCode(parseInt(hex, 16));
+      return /^[A-Za-z0-9\-._~$]$/.test(character) ? character : escape;
+    }),
+  );
 }
 
 /**

@@ -303,6 +303,9 @@ export function jsonRepresentationForType(
  * Delegates to {@link jsonRepresentationForType} for named structural types and
  * to {@link scalarPlaceholder} for scalars. Passes a *copy* of `visited` when
  * recursing into named types to avoid false cycle detection across sibling properties.
+ * Arrays, records and unions are tracked too, so a recursive type such as
+ * `union Node { Node[], string }` renders as an empty array (or the union's
+ * name) at the point it repeats instead of recursing forever.
  *
  * @param program - The TypeSpec program.
  * @param type - Any TypeSpec type.
@@ -335,18 +338,30 @@ export function jsonValueForType(
       );
     case "Model":
       if (isArrayModelType(program, type)) {
+        if (visited.has(type)) return [];
         const itemType = arrayElementType(type);
         return [
           itemType
-            ? jsonValueForType(program, itemType, visited, visibilityFilter)
+            ? jsonValueForType(
+                program,
+                itemType,
+                new Set(visited).add(type),
+                visibilityFilter,
+              )
             : "unknown",
         ];
       }
       if (isRecordModelType(program, type)) {
+        if (visited.has(type)) return {};
         const valueType = type.indexer?.value;
         return {
           property: valueType
-            ? jsonValueForType(program, valueType, visited, visibilityFilter)
+            ? jsonValueForType(
+                program,
+                valueType,
+                new Set(visited).add(type),
+                visibilityFilter,
+              )
             : "unknown",
         };
       }
@@ -358,12 +373,13 @@ export function jsonValueForType(
         visibilityFilter,
       );
     case "Union": {
+      if (visited.has(type)) return typeReference(program, type);
       const firstVariant = [...type.variants.values()][0];
       return firstVariant
         ? jsonValueForType(
             program,
             firstVariant.type,
-            visited,
+            new Set(visited).add(type),
             visibilityFilter,
           )
         : (type.name ?? "union");

@@ -13,6 +13,7 @@ import {
 } from "@typespec/compiler";
 import {
   isMetadata,
+  isStatusCode,
   resolveRequestVisibility,
   type HttpOperation,
   type HttpOperationResponse,
@@ -309,10 +310,12 @@ function buildHttpRequestExample(
 /**
  * Builds the multi-line HTTP response example string.
  *
- * Picks the primary success response (falling back to the first response).
- * Response headers are listed after the status line, using sample values (or
- * the `@opExample` values when present). Returns `undefined` when no responses
- * are defined.
+ * When an `@opExample` return value carries a `@statusCode` value (e.g.
+ * `#{ statusCode: 404, body: ... }`), the response with that status code is
+ * used. Otherwise the primary success response is used (falling back to the
+ * first response). Response headers are listed after the status line, using
+ * sample values (or the `@opExample` values when present). Returns
+ * `undefined` when no responses are defined.
  *
  * @param program - The TypeSpec program.
  * @param httpOperation - The resolved HTTP operation, or `undefined`.
@@ -329,7 +332,12 @@ function buildHttpResponseExample(
       : JSON.stringify(responseValue, null, 2);
   }
 
-  const response = pickPrimaryResponse(httpOperation.responses);
+  const matched =
+    responseValue === undefined
+      ? undefined
+      : pickExampleResponse(program, httpOperation.responses, responseValue);
+  const response =
+    matched?.response ?? pickPrimaryResponse(httpOperation.responses);
   if (!response) {
     return undefined;
   }
@@ -343,7 +351,9 @@ function buildHttpResponseExample(
     example === undefined
       ? inferResponseBodyValue(program, content)
       : example.body;
-  const lines = [`HTTP/1.1 ${formatStatusCode(response.statusCodes)}`];
+  const lines = [
+    `HTTP/1.1 ${formatStatusCode(matched?.statusCode ?? response.statusCodes)}`,
+  ];
 
   for (const [name, property] of Object.entries(content?.headers ?? {})) {
     const value =
@@ -650,6 +660,77 @@ function inferResponseBodyValue(
 
   return responseContent.body.bodyKind === "single"
     ? jsonValueForType(program, responseContent.body.type, new Set<Type>())
+    : undefined;
+}
+
+/**
+ * Finds the response an `@opExample` return value belongs to, by reading the
+ * value of each response model's `@statusCode` property from the example.
+ *
+ * An exact status code wins over a range (`@minValue(400) @maxValue(499)`).
+ * The `default` (`*`) response never matches: it comes from a model without a
+ * `@statusCode` property, so an example cannot select it. Returns `undefined`
+ * when the example carries no status code that any response accepts.
+ *
+ * @param program - The TypeSpec program.
+ * @param responses - All HTTP response objects for an operation.
+ * @param value - The serialized `@opExample` return value.
+ * @returns The matching response and the example's numeric status code.
+ */
+function pickExampleResponse(
+  program: Program,
+  responses: HttpOperationResponse[],
+  value: unknown,
+): { response: HttpOperationResponse; statusCode: number } | undefined {
+  const record = asRecord(value);
+  if (!record) {
+    return undefined;
+  }
+
+  const candidates: Array<{
+    response: HttpOperationResponse;
+    statusCode: number;
+    rank: number;
+  }> = [];
+  for (const response of responses) {
+    if (response.type.kind !== "Model") continue;
+    for (const property of walkPropertiesInherited(response.type)) {
+      const statusCode = record[property.name];
+      if (!isStatusCode(program, property) || typeof statusCode !== "number") {
+        continue;
+      }
+      const rank = statusCodeMatchRank(response.statusCodes, statusCode);
+      if (rank !== undefined) {
+        candidates.push({ response, statusCode, rank });
+      }
+    }
+  }
+
+  candidates.sort((left, right) => left.rank - right.rank);
+  return candidates[0];
+}
+
+/**
+ * Ranks how specifically a response's status codes accept `statusCode`:
+ * `0` for an exact code, `1` for a range, or `undefined` when the response
+ * does not accept it.
+ *
+ * @param statusCodes - The response's status code or range. Callers only pass
+ *   responses declared by a `@statusCode` property, which are never `*`.
+ * @param statusCode - The numeric status code from an example.
+ */
+function statusCodeMatchRank(
+  statusCodes: HttpOperationResponse["statusCodes"],
+  statusCode: number,
+): number | undefined {
+  if (typeof statusCodes === "number") {
+    return statusCodes === statusCode ? 0 : undefined;
+  }
+  if (statusCodes === "*") {
+    return undefined;
+  }
+  return statusCode >= statusCodes.start && statusCode <= statusCodes.end
+    ? 1
     : undefined;
 }
 
