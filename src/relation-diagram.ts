@@ -1,11 +1,11 @@
 import {
   isArrayModelType,
   isRecordModelType,
-  walkPropertiesInherited,
   type Program,
   type Type,
 } from "@typespec/compiler";
 import type { OutputFormat } from "./lib.js";
+import { payloadProperties } from "./payloads.js";
 import type { ServiceEntry } from "./service-entry.js";
 import { arrayElementType } from "./type-ref.js";
 
@@ -46,7 +46,7 @@ export function buildRelationDiagram(
   const entities: string[] = [];
   const relationships: string[] = [];
   // Deduplicate relationships: a given (parent, child, propertyName) triple
-  // can only appear once even if walkPropertiesInherited surfaces it multiple times.
+  // can only appear once even if payloadProperties surfaces it multiple times.
   const seenRelationships = new Set<string>();
 
   for (const { name, type } of service.rawTypes) {
@@ -57,7 +57,7 @@ export function buildRelationDiagram(
       !isArrayModelType(program, type) &&
       !isRecordModelType(program, type)
     ) {
-      for (const prop of walkPropertiesInherited(type)) {
+      for (const prop of payloadProperties(program, type)) {
         const attrType = erAttrType(program, prop.type);
         attrs.push(`    ${attrType} ${sanitizeErName(prop.name)}`);
 

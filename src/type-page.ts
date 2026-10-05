@@ -24,8 +24,9 @@ import {
   describeSummary,
   formatExternalDocsLink,
 } from "./utils.js";
-import { modelProperties } from "./operation-page.js";
+import { propertyDocs } from "./operation-page.js";
 import type { ParameterDoc } from "./operation-page.js";
+import { payloadBaseModel, payloadProperties } from "./payloads.js";
 
 /**
  * Documentation for a single variant of a TypeSpec `union`.
@@ -87,12 +88,16 @@ export interface TypePageModel {
   breadcrumbs: string[];
   /**
    * Markdown reference string for the base/parent type:
-   * - Models: the `extends` base model, or `"Array"` / `"Record"` for generics.
+   * - Models: the nearest `extends` base model that is not a metadata-only or
+   *   response model, or `"Array"` / `"Record"` for generics.
    * - Scalars: the base scalar.
    * - Unions / Enums: always `undefined`.
    */
   baseType?: string;
-  /** Documented properties (Models only; empty for all other kinds). */
+  /**
+   * Documented properties (Models only; empty for all other kinds). Excludes
+   * `@header`, `@cookie` and `@statusCode` properties, which are not data.
+   */
   properties: ParameterDoc[];
   /** Operations that use this type as a parameter or return type. */
   methods: OperationSummary[];
@@ -141,6 +146,7 @@ export function buildTypePage(
   );
 
   if (type.kind === "Model") {
+    const baseModel = payloadBaseModel(program, type);
     return {
       title: type.name,
       summary,
@@ -150,10 +156,12 @@ export function buildTypePage(
       apiName,
       kind: type.kind,
       breadcrumbs: breadcrumbsForType(program, type),
-      baseType: type.baseModel
-        ? makeRef(type.baseModel)
-        : modelBaseType(program, type),
-      properties: modelProperties(program, type, makeRef),
+      baseType: baseModel ? makeRef(baseModel) : modelBaseType(program, type),
+      properties: propertyDocs(
+        program,
+        payloadProperties(program, type),
+        makeRef,
+      ),
       methods,
       variants: [],
       members: [],

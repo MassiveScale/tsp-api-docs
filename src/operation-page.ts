@@ -6,6 +6,7 @@ import {
   getSummary,
   walkPropertiesInherited,
   type Model,
+  type ModelProperty,
   type Operation,
   type Program,
   type Type,
@@ -14,10 +15,12 @@ import {
   getHttpOperation,
   resolveRequestVisibility,
   type HttpOperation,
+  type HttpOperationParameter,
   type HttpOperationResponse,
 } from "@typespec/http";
 import type { OperationExampleDoc } from "./operation-examples.js";
 import { operationExamples } from "./operation-examples.js";
+import { responsePayloadType } from "./payloads.js";
 import {
   jsonValueForType,
   makeLinkedTypeRef,
@@ -30,6 +33,8 @@ import {
   describeSummary,
   formatExternalDocsLink,
   formatStatusCode,
+  isSuccessStatusCode,
+  readableUriTemplate,
   toTitleCaseLabel,
 } from "./utils.js";
 
@@ -95,6 +100,8 @@ export interface ResponseDoc {
   type: string;
   /** Human-readable description sourced from `@doc`, `@summary`, or a fallback. */
   description: string;
+  /** Response headers returned with this status code, keyed by wire name. */
+  headers: HttpParameterDoc[];
 }
 
 /**
@@ -113,15 +120,28 @@ export interface OperationPageModel {
   apiName?: string;
   /** Ordered breadcrumb labels, e.g. `["API", "Widgets", "create"]`. */
   breadcrumbs: string[];
-  /** First line of the HTTP request example, e.g. `"POST /api/v1/widgets"`. */
+  /**
+   * First line of the HTTP request, e.g. `"GET /api/v1/widgets/{id}{?$expand}"`.
+   * Percent-encoded names inside URI template expressions are decoded so the
+   * line reads the way a client would type it.
+   */
   httpRequest?: string;
-  /** Optional query parameters extracted from the HTTP operation. */
+  /** Path parameters extracted from the HTTP operation, by wire name. */
+  pathParameters: HttpParameterDoc[];
+  /** Query parameters extracted from the HTTP operation, by wire name. */
   optionalQueryParameters: HttpParameterDoc[];
-  /** Request headers extracted from the HTTP operation. */
+  /** Request headers extracted from the HTTP operation, by wire name. */
   requestHeaders: HttpParameterDoc[];
+  /** Request cookies extracted from the HTTP operation, by wire name. */
+  requestCookies: HttpParameterDoc[];
   /** TypeSpec signature string, e.g. `"create(body: CreateRequest) => Widget"`. */
   signature: string;
-  /** All parameters of the TypeSpec operation (includes body, path, query, headers). */
+  /**
+   * All parameters of the TypeSpec operation, by TypeSpec name. The built-in
+   * template renders these only for operations without HTTP metadata; HTTP
+   * operations document the same parameters by wire name in the path, query,
+   * header, cookie and body sections instead.
+   */
   parameters: ParameterDoc[];
   /** HTTP request body documentation, if the operation has a body. */
   requestBody?: RequestBodyDoc;
@@ -129,7 +149,10 @@ export interface OperationPageModel {
   returnType: string;
   /** One row per HTTP response status code defined on the operation. */
   responses: ResponseDoc[];
-  /** Response headers defined on successful responses. */
+  /**
+   * Every response header across all status codes, deduplicated by wire name.
+   * See {@link ResponseDoc.headers} for the headers of a single status code.
+   */
   responseHeaders: HttpParameterDoc[];
   /** Text from `@returns` on the operation, if present. */
   returnsDoc?: string;
@@ -184,21 +207,34 @@ export function buildOperationPage(
     httpRequest: httpOperation
       ? formatHttpRequest(httpOperation, routePrefix)
       : undefined,
-    optionalQueryParameters: buildQueryParameterDocs(
+    pathParameters: buildHttpParameterDocs(
       program,
       httpOperation,
+      "path",
       makeRef,
     ),
-    requestHeaders: buildHeaderDocs(program, httpOperation, makeRef),
+    optionalQueryParameters: buildHttpParameterDocs(
+      program,
+      httpOperation,
+      "query",
+      makeRef,
+    ),
+    requestHeaders: buildHttpParameterDocs(
+      program,
+      httpOperation,
+      "header",
+      makeRef,
+    ),
+    requestCookies: buildHttpParameterDocs(
+      program,
+      httpOperation,
+      "cookie",
+      makeRef,
+    ),
     signature: `${operation.name}(${formatParametersSignature(program, operation.parameters)}) => ${typeReference(program, operation.returnType)}`,
     parameters: modelProperties(program, operation.parameters, makeRef),
     requestBody: buildRequestBodyDoc(program, httpOperation, makeRef),
-    returnType: buildOperationReturnType(
-      program,
-      operation,
-      httpOperation,
-      makeRef,
-    ),
+    returnType: buildOperationReturnType(operation, httpOperation, makeRef),
     responses: buildResponseDocs(program, operation, httpOperation, makeRef),
     responseHeaders: buildResponseHeaderDocs(program, httpOperation, makeRef),
     returnsDoc: getReturnsDoc(program, operation),
@@ -246,7 +282,23 @@ export function modelProperties(
   model: Model,
   makeRef: (type: Type) => string,
 ): ParameterDoc[] {
-  return [...walkPropertiesInherited(model)].map((property) => ({
+  return propertyDocs(program, walkPropertiesInherited(model), makeRef);
+}
+
+/**
+ * Converts model properties into an array of {@link ParameterDoc}, one per
+ * property, in iteration order.
+ *
+ * @param program - The TypeSpec program.
+ * @param properties - The properties to document.
+ * @param makeRef - A type-reference function (may produce Markdown links).
+ */
+export function propertyDocs(
+  program: Program,
+  properties: Iterable<ModelProperty>,
+  makeRef: (type: Type) => string,
+): ParameterDoc[] {
+  return [...properties].map((property) => ({
     name: property.name,
     type: makeRef(property.type),
     requiredLabel: property.optional ? "No" : "Yes",
@@ -277,7 +329,7 @@ export function formatParametersSignature(
 }
 
 /**
- * Formats the first line of an HTTP request example, e.g. `"POST /api/v1/widgets"`.
+ * Formats the HTTP request line, e.g. `"GET /api/v1/widgets/{id}{?$expand}"`.
  *
  * @param httpOperation - The resolved HTTP operation.
  * @param routePrefix - Optional prefix to prepend to the URI template.
@@ -286,9 +338,10 @@ function formatHttpRequest(
   httpOperation: HttpOperation,
   routePrefix?: string,
 ): string {
+  const uriTemplate = readableUriTemplate(httpOperation.uriTemplate);
   const path = routePrefix
-    ? applyRoutePrefix(httpOperation.uriTemplate, routePrefix)
-    : httpOperation.uriTemplate;
+    ? applyRoutePrefix(uriTemplate, routePrefix)
+    : uriTemplate;
   return `${httpOperation.verb.toUpperCase()} ${path}`;
 }
 
@@ -339,19 +392,22 @@ function buildRequestBodyDoc(
 }
 
 /**
- * Extracts optional query parameter documentation from an HTTP operation.
+ * Extracts documentation for one kind of HTTP parameter (path, query, header
+ * or cookie) from an HTTP operation.
  *
- * Only parameters of `type === "query"` are included. Required query parameters
- * are excluded — they should be documented in the main parameters table.
+ * Uses `parameter.name`, the wire name a client types (e.g. `"$expand"` or
+ * `"If-Match"`), rather than `parameter.param.name`, the TypeSpec identifier.
  *
  * @param program - The TypeSpec program.
  * @param httpOperation - The resolved HTTP operation, or `undefined`.
+ * @param kind - The parameter location to extract.
  * @param makeRef - A type-reference function for Markdown links.
- * @returns An array of optional query parameter docs, or empty when no HTTP op.
+ * @returns The matching parameter docs, or empty when there is no HTTP op.
  */
-function buildQueryParameterDocs(
+function buildHttpParameterDocs(
   program: Program,
   httpOperation: HttpOperation | undefined,
+  kind: HttpOperationParameter["type"],
   makeRef: (type: Type) => string,
 ): HttpParameterDoc[] {
   if (!httpOperation) {
@@ -359,40 +415,7 @@ function buildQueryParameterDocs(
   }
 
   return httpOperation.parameters.parameters
-    .filter((parameter) => parameter.type === "query")
-    .map((parameter) => ({
-      name: parameter.param.name,
-      type: makeRef(parameter.param.type),
-      requiredLabel: parameter.param.optional ? "No" : "Yes",
-      summary:
-        getSummary(program, parameter.param) ??
-        getDoc(program, parameter.param),
-      summaryOrFallback: describeSummary(program, parameter.param),
-    }));
-}
-
-/**
- * Extracts request header documentation from an HTTP operation.
- *
- * Note: uses `parameter.name` (the wire header name, e.g. `"X-Api-Key"`) for
- * the `name` field rather than `parameter.param.name` (the TypeSpec identifier).
- *
- * @param program - The TypeSpec program.
- * @param httpOperation - The resolved HTTP operation, or `undefined`.
- * @param makeRef - A type-reference function for Markdown links.
- * @returns An array of request header docs, or empty when no HTTP op.
- */
-function buildHeaderDocs(
-  program: Program,
-  httpOperation: HttpOperation | undefined,
-  makeRef: (type: Type) => string,
-): HttpParameterDoc[] {
-  if (!httpOperation) {
-    return [];
-  }
-
-  return httpOperation.parameters.parameters
-    .filter((parameter) => parameter.type === "header")
+    .filter((parameter) => parameter.type === kind)
     .map((parameter) => ({
       name: parameter.name,
       type: makeRef(parameter.param.type),
@@ -405,9 +428,11 @@ function buildHeaderDocs(
 }
 
 /**
- * Extracts the unique body type references from a single HTTP response object.
+ * Builds the type reference string for the body of a single HTTP response.
  *
- * Returns `"void"` when the response has no body contents.
+ * Implicit bodies are shown as their named response model, so the reference
+ * links to that model's type page. Returns `"void"` when the response has no
+ * body contents.
  *
  * @param response - One HTTP response object (a single status-code variant).
  * @param makeRef - A type-reference function for Markdown links.
@@ -417,25 +442,27 @@ function httpResponseBodyType(
   makeRef: (type: Type) => string,
 ): string {
   const bodyTypes = response.responses
-    .filter((content) => content.body)
-    .map((content) => makeRef(content.body!.type));
+    .map((content) => responsePayloadType(response, content))
+    .filter((type): type is Type => type !== undefined)
+    .map(makeRef);
   return bodyTypes.length > 0 ? [...new Set(bodyTypes)].join(" | ") : "void";
 }
 
 /**
- * Builds the return type display string for an operation page.
+ * Builds the return type display string for an operation.
  *
- * For HTTP operations, collects unique body types across all responses and
- * joins them with `" | "`. Falls back to the TypeSpec return type when no
- * response has a body or when there is no HTTP metadata.
+ * For HTTP operations, this is what a caller receives on success: the body
+ * types of every 2xx response (`"void"` for a 2xx response without a body),
+ * deduplicated and joined with `" | "`. Error responses are listed in the
+ * responses table instead. When the operation declares no 2xx response, the
+ * body types of all responses are used. Falls back to the TypeSpec return
+ * type when there is no HTTP metadata or no responses at all.
  *
- * @param program - The TypeSpec program.
  * @param operation - The TypeSpec operation.
  * @param httpOperation - The resolved HTTP operation, or `undefined`.
  * @param makeRef - A type-reference function for Markdown links.
  */
-function buildOperationReturnType(
-  program: Program,
+export function buildOperationReturnType(
   operation: Operation,
   httpOperation: HttpOperation | undefined,
   makeRef: (type: Type) => string,
@@ -444,15 +471,17 @@ function buildOperationReturnType(
     return makeRef(operation.returnType);
   }
 
+  const successResponses = httpOperation.responses.filter((response) =>
+    isSuccessStatusCode(response.statusCodes),
+  );
+  const responses =
+    successResponses.length > 0 ? successResponses : httpOperation.responses;
+
   const bodyTypes: string[] = [];
-  for (const response of httpOperation.responses) {
-    for (const content of response.responses) {
-      if (content.body) {
-        const ref = makeRef(content.body.type);
-        if (!bodyTypes.includes(ref)) {
-          bodyTypes.push(ref);
-        }
-      }
+  for (const response of responses) {
+    const ref = httpResponseBodyType(response, makeRef);
+    if (!bodyTypes.includes(ref)) {
+      bodyTypes.push(ref);
     }
   }
 
@@ -486,6 +515,7 @@ function buildResponseDocs(
         description:
           getReturnsDoc(program, operation) ??
           `Returns ${makeRef(operation.returnType)}.`,
+        headers: [],
       },
     ];
   }
@@ -498,7 +528,44 @@ function buildResponseDocs(
       getSummary(program, response.type) ??
       getDoc(program, response.type) ??
       FALLBACK_SUMMARY,
+    headers: responseHeaderDocs(program, [response], makeRef),
   }));
+}
+
+/**
+ * Collects the response headers of the given responses, deduplicated by wire
+ * name, so a header declared on several content entries (or several status
+ * codes) appears once.
+ *
+ * @param program - The TypeSpec program.
+ * @param responses - The HTTP responses whose headers to collect.
+ * @param makeRef - A type-reference function for Markdown links.
+ */
+function responseHeaderDocs(
+  program: Program,
+  responses: HttpOperationResponse[],
+  makeRef: (type: Type) => string,
+): HttpParameterDoc[] {
+  const seen = new Set<string>();
+  const docs: HttpParameterDoc[] = [];
+
+  for (const response of responses) {
+    for (const content of response.responses) {
+      for (const [name, prop] of Object.entries(content.headers ?? {})) {
+        if (seen.has(name)) continue;
+        seen.add(name);
+        docs.push({
+          name,
+          type: makeRef(prop.type),
+          requiredLabel: prop.optional ? "No" : "Yes",
+          summary: getSummary(program, prop) ?? getDoc(program, prop),
+          summaryOrFallback: describeSummary(program, prop),
+        });
+      }
+    }
+  }
+
+  return docs;
 }
 
 /**
@@ -518,29 +585,7 @@ function buildResponseHeaderDocs(
   httpOperation: HttpOperation | undefined,
   makeRef: (type: Type) => string,
 ): HttpParameterDoc[] {
-  if (!httpOperation) {
-    return [];
-  }
-
-  const seen = new Set<string>();
-  const docs: HttpParameterDoc[] = [];
-
-  for (const response of httpOperation.responses) {
-    for (const content of response.responses) {
-      if (!content.headers) continue;
-      for (const [name, prop] of Object.entries(content.headers)) {
-        if (seen.has(name)) continue;
-        seen.add(name);
-        docs.push({
-          name,
-          type: makeRef(prop.type),
-          requiredLabel: prop.optional ? "No" : "Yes",
-          summary: getSummary(program, prop) ?? getDoc(program, prop),
-          summaryOrFallback: describeSummary(program, prop),
-        });
-      }
-    }
-  }
-
-  return docs;
+  return httpOperation
+    ? responseHeaderDocs(program, httpOperation.responses, makeRef)
+    : [];
 }

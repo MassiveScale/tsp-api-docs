@@ -16,12 +16,19 @@ import {
   type Union,
 } from "@typespec/compiler";
 import { unsafe_mutateSubgraphWithNamespace } from "@typespec/compiler/experimental";
+import type { HttpOperation } from "@typespec/http";
 import { getVersioningMutators, type Version } from "@typespec/versioning";
 import {
   collectNamespaces,
   collectOperations,
   collectTypes,
 } from "./collect.js";
+import {
+  isSameDeclaration,
+  operationPayloadTypes,
+  selectDocumentedTypes,
+  unwrapMergePatch,
+} from "./payloads.js";
 import { arrayElementType, makeLinkedTypeRef } from "./type-ref.js";
 import {
   describeSummary,
@@ -34,7 +41,11 @@ import {
 // NOTE: These imports create a circular dependency at the module graph level,
 // but Node.js ESM handles this via live bindings. By the time collectServiceEntry
 // is actually called at runtime, both modules will be fully initialised.
-import { buildOperationPage } from "./operation-page.js";
+import {
+  buildOperationPage,
+  buildOperationReturnType,
+  resolveHttpOperation,
+} from "./operation-page.js";
 import { buildTypePage } from "./type-page.js";
 
 /**
@@ -269,8 +280,17 @@ export function collectServiceEntry(
   routePrefix?: string,
 ): ServiceEntry {
   const namespaces = collectNamespaces(serviceNamespace);
-  const operations = collectOperations(program, serviceNamespace);
-  const types = collectTypes(program, serviceNamespace);
+  const operations = collectOperations(program, serviceNamespace).map(
+    (entry) => ({
+      ...entry,
+      httpOperation: resolveHttpOperation(program, entry.operation),
+    }),
+  );
+  const types = selectDocumentedTypes(
+    program,
+    collectTypes(program, serviceNamespace),
+    operations,
+  );
   const baseServiceLabel = describeNamespace(
     program,
     serviceNamespace,
@@ -365,7 +385,11 @@ export function collectServiceEntry(
       name: entry.name,
       title: entry.name,
       containerLabel: entry.containerLabel,
-      returnType: overviewTypeRef(entry.operation.returnType),
+      returnType: buildOperationReturnType(
+        entry.operation,
+        entry.httpOperation,
+        overviewTypeRef,
+      ),
       summary:
         getSummary(program, entry.operation) ??
         getDoc(program, entry.operation),
@@ -407,7 +431,8 @@ export function collectServiceEntry(
  *
  * @param program - The TypeSpec program.
  * @param types - All named types in the service, sorted by name.
- * @param operations - All operations in the service, sorted by name.
+ * @param operations - All operations in the service, sorted by name, each with
+ *   its resolved HTTP operation when one is available.
  * @param operationPathById - Map from operation entity ID to its relative file path.
  * @param typePathById - Map from type entity ID to its relative file path.
  * @returns A map from type entity ID to its list of related operation summaries.
@@ -424,6 +449,7 @@ export function buildRelatedMethodsByType(
     name: string;
     containerLabel: string;
     operation: Operation;
+    httpOperation?: HttpOperation;
   }>,
   operationPathById: Map<string, string>,
   typePathById: Map<string, string>,
@@ -437,13 +463,22 @@ export function buildRelatedMethodsByType(
   for (const typeEntry of types) {
     const methods = operations
       .filter((operationEntry) =>
-        operationUsesType(program, operationEntry.operation, typeEntry.type),
+        operationUsesType(
+          program,
+          operationEntry.operation,
+          typeEntry.type,
+          operationEntry.httpOperation,
+        ),
       )
       .map((operationEntry) => ({
         name: operationEntry.name,
         title: operationEntry.name,
         containerLabel: operationEntry.containerLabel,
-        returnType: makeRef(operationEntry.operation.returnType),
+        returnType: buildOperationReturnType(
+          operationEntry.operation,
+          operationEntry.httpOperation,
+          makeRef,
+        ),
         summary:
           getSummary(program, operationEntry.operation) ??
           getDoc(program, operationEntry.operation),
@@ -469,6 +504,10 @@ export function buildRelatedMethodsByType(
  *    directly reference `target` — this handles wrapper body patterns such as
  *    `op create(body: CreateWidgetRequest): Widget` where `CreateWidgetRequest`
  *    has `widget: Widget`.
+ * 4. When `httpOperation` is given, a request or response body resolved by
+ *    `@typespec/http` directly references `target`. This covers types returned
+ *    or accepted through a response model (`EntityResponse<Widget>`), through
+ *    `MergePatchUpdate<Widget>`, and as an `HttpPart<Widget>` of a multipart body.
  *
  * `@error` types are always excluded: they appear on every operation that can
  * fail and listing them on a type page would be misleading.
@@ -476,11 +515,13 @@ export function buildRelatedMethodsByType(
  * @param program - The TypeSpec program.
  * @param operation - The operation to test.
  * @param target - The type to look for.
+ * @param httpOperation - The operation's resolved HTTP metadata, if any.
  */
 export function operationUsesType(
   program: Program,
   operation: Operation,
   target: Model | Enum | Union | Scalar,
+  httpOperation?: HttpOperation,
 ): boolean {
   // @error types are cross-cutting error envelopes, not addressable entities.
   if (isErrorModel(program, target)) {
@@ -489,6 +530,18 @@ export function operationUsesType(
 
   if (typeDirectlyReferencesTarget(program, operation.returnType, target)) {
     return true;
+  }
+
+  if (httpOperation) {
+    for (const type of operationPayloadTypes(httpOperation)) {
+      if (typeDirectlyReferencesTarget(program, type, target)) {
+        return true;
+      }
+      const source = unwrapMergePatch(program, type);
+      if (source !== type && isSameDeclaration(source, target)) {
+        return true;
+      }
+    }
   }
 
   for (const property of walkPropertiesInherited(operation.parameters)) {

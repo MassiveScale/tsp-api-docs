@@ -7,6 +7,29 @@ This project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [Unreleased]
+
+### Changed
+
+- Widened the `@typespec/versioning` peer dependency from `^0.85.0` to `>=0.85.0 <1.0.0`. A caret on a `0.x` version only allows patch releases (`0.85.x`), so projects on `@typespec/versioning` 0.86 or later hit a peer-dependency conflict when installing this emitter.
+- **Breaking:** Type pages and the Types index now cover only payload data, decided with `@typespec/http` (`getHttpOperation`, `isMetadata`, and the resolved request/response bodies) instead of every named model in the namespace. This is the same rule `@massivescale/tsp-aspnetcore-api` 0.15.0 uses. **Pages disappear, so links to them break:**
+  - **Metadata-only models** (every property is `@statusCode`, `@header`, `@cookie`, `@query`, or `@path`, e.g. `ETagHeader`, `IfMatchHeader`, `UpdatedResponse`) no longer get a page.
+  - **Response models with an explicit `@body` / `@bodyRoot`** (e.g. `EntityResponse<T>`, `@error model NotFoundError { ...NotFoundResponse; @body body: Error; }`) no longer get a page. Their body type does, and their `@doc` still describes the status code on the operation page.
+  - In a service with HTTP operations, models, unions, and scalars that no operation reaches through a body, parameter, property, base model, discriminated derived model, or `MergePatchUpdate<T>` source no longer get a page. Enums always do. A service with no HTTP operations keeps every type except the two kinds above.
+- **Breaking:** A response model that mixes metadata with plain properties and has no `@body` (an _implicit body_) keeps its page, but the page lists only the body properties. More generally, `@header`, `@cookie`, and `@statusCode` properties, and properties typed as a metadata-only or explicit-body response model, never appear in a type's property table, JSON representation, example bodies, or relation diagram, wherever the model is used.
+- A model's "Base type" skips metadata-only base models and points at the nearest base that has a page.
+- The **Methods** table on a type page now lists operations that return or accept the type through a response model (`EntityResponse<Widget>`) or through `MergePatchUpdate<Widget>`.
+- The **Response** line on operation pages, and the Returns column on the overview, operations index, and Methods tables, now show what a caller receives on success: the 2xx body types, or `void`. Previously they listed every body type including errors (e.g. `[Error]` for an update that returns `204`), or the raw TypeSpec return type (e.g. `UpdatedResponse | NotFoundError | ...`).
+- **Breaking (custom templates):** The operation page's **Parameters** table, which repeated headers and the body already covered in their own sections, is replaced by a **Path parameters** table (and a **Request cookies** table when the operation takes cookies). Operations without HTTP metadata still render **Parameters**. Custom `operation` templates get new `pathParameters` and `requestCookies` variables, and each entry in `responses` now has a `headers` list.
+
+### Fixed
+
+- Response headers are now documented per status code on operation pages (name, type, required, description) and included in the example HTTP response (e.g. `ETag: string`). When an `@opExample` returns a response model, its `@body` value is used as the JSON body and its header values as header lines, instead of the whole model being printed as the body.
+- Query parameters use their wire name (`@query(#{ name: "$expand" })` documents `$expand`, not `expand`) in the query parameter table, the example request (`?$expand=string`), and the URI template, which now renders `{?$expand}` instead of `{?%24expand}`. Array query parameters render as `name=a,b`, or `name=a&name=b` with `explode: true`. Path parameters also use their wire name in examples.
+- Every IANA-registered HTTP status code now renders with its reason phrase (e.g. `409 Conflict`, `412 Precondition Failed`), not just the nine most common ones.
+
+---
+
 ## [v1.0.0] — Initial Release
 
 ### Added
