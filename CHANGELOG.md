@@ -11,6 +11,7 @@ This project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Widened the `@typespec/versioning` peer dependency from `^0.85.0` to `>=0.85.0 <1.0.0`. A caret on a `0.x` version only allows patch releases (`0.85.x`), so projects on `@typespec/versioning` 0.86 or later hit a peer-dependency conflict when installing this emitter.
 - **Breaking:** Type pages and the Types index now cover only payload data, decided with `@typespec/http` (`getHttpOperation`, `isMetadata`, and the resolved request/response bodies) instead of every named model in the namespace. This is the same rule `@massivescale/tsp-aspnetcore-api` 0.15.0 uses. **Pages disappear, so links to them break:**
   - **Metadata-only models** (every property is `@statusCode`, `@header`, `@cookie`, `@query`, or `@path`, e.g. `ETagHeader`, `IfMatchHeader`, `UpdatedResponse`) no longer get a page.
   - **Response models with an explicit `@body` / `@bodyRoot`** (e.g. `EntityResponse<T>`, `@error model NotFoundError { ...NotFoundResponse; @body body: Error; }`) no longer get a page. Their body type does, and their `@doc` still describes the status code on the operation page.

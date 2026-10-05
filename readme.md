@@ -31,7 +31,7 @@ Supports multiple output formats targeting Azure DevOps Wiki, GitHub, and DocFx.
 - `@typespec/compiler` ^1.15.0
 - `@typespec/http` ^1.15.0
 - `@typespec/openapi` ^1.15.0
-- `@typespec/versioning` ^0.85.0
+- `@typespec/versioning` >=0.85.0 <1.0.0
 
 ## Install
 

@@ -35,7 +35,7 @@
 - Prefer focused, incremental changes over broad refactors.
 - Configuration options in `src/lib.ts` and in documentation must be sorted alphabetically.
 - The `files` field in `package.json` is the publish whitelist — only `dist/src/`, `templates/`, `README.md`, `CHANGELOG.md`, and `LICENSE` are shipped to npm. Do not widen it without a clear reason.
-- Peer dependencies are `@typespec/compiler >= 1.12.0`, `@typespec/http >= 1.12.0`, and `@typespec/versioning >= 0.82.0`.
+- Peer dependencies are `@typespec/compiler ^1.15.0`, `@typespec/http ^1.15.0`, `@typespec/openapi ^1.15.0`, and `@typespec/versioning >=0.85.0 <1.0.0`. Keep `@typespec/versioning` as an explicit range: a caret on a `0.x` version (`^0.85.0`) only allows `0.85.x`, which blocks consumers on newer minor releases.
 - The `typeDirectlyReferencesTarget` function in `service-entry.ts` intentionally does not recurse into regular model properties — it only checks direct references and one level of plain wrapper model properties. This is by design to avoid false positives on deeply nested types.
 - Type pages cover payload data only. `src/payloads.ts` decides which types get pages by asking `@typespec/http` how request and response bodies resolve; metadata-only models and response models with an explicit `@body` never get a page, and `@header` / `@cookie` / `@statusCode` properties never appear in property tables or JSON. This mirrors `@massivescale/tsp-aspnetcore-api` (`src/payloads.ts` there) — keep the two rules in sync. See "Which types get pages" in `readme.md`.
 - In versioned services, `getMergePatchSource` returns the unversioned model, not the version snapshot's copy. Compare with `isSameDeclaration`, never by identity.
