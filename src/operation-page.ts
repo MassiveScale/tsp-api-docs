@@ -13,11 +13,13 @@ import {
 } from "@typespec/compiler";
 import {
   getHttpOperation,
+  getQueryParamName,
   resolveRequestVisibility,
   type HttpOperation,
   type HttpOperationParameter,
   type HttpOperationResponse,
 } from "@typespec/http";
+import { getGlobalQueryOptions } from "./decorators.js";
 import type { OperationExampleDoc } from "./operation-examples.js";
 import { operationExamples } from "./operation-examples.js";
 import { responsePayloadType } from "./payloads.js";
@@ -130,6 +132,12 @@ export interface OperationPageModel {
   pathParameters: HttpParameterDoc[];
   /** Query parameters extracted from the HTTP operation, by wire name. */
   optionalQueryParameters: HttpParameterDoc[];
+  /**
+   * Query options from the nearest `@globalQueryOptions`, by wire name. They
+   * supplement {@link optionalQueryParameters}; an option whose wire name the
+   * operation already declares is left out.
+   */
+  globalQueryOptions: HttpParameterDoc[];
   /** Request headers extracted from the HTTP operation, by wire name. */
   requestHeaders: HttpParameterDoc[];
   /** Request cookies extracted from the HTTP operation, by wire name. */
@@ -196,6 +204,12 @@ export function buildOperationPage(
     : operation.name;
 
   const makeRef = makeLinkedTypeRef(program, typePathById, (p) => `../${p}`);
+  const optionalQueryParameters = buildHttpParameterDocs(
+    program,
+    httpOperation,
+    "query",
+    makeRef,
+  );
 
   return {
     title: toTitleCaseLabel(operationLabel),
@@ -213,10 +227,11 @@ export function buildOperationPage(
       "path",
       makeRef,
     ),
-    optionalQueryParameters: buildHttpParameterDocs(
+    optionalQueryParameters,
+    globalQueryOptions: buildGlobalQueryOptionDocs(
       program,
-      httpOperation,
-      "query",
+      operation,
+      optionalQueryParameters,
       makeRef,
     ),
     requestHeaders: buildHttpParameterDocs(
@@ -425,6 +440,43 @@ function buildHttpParameterDocs(
         getDoc(program, parameter.param),
       summaryOrFallback: describeSummary(program, parameter.param),
     }));
+}
+
+/**
+ * Builds documentation for the global query options that apply to an
+ * operation, deduplicated by wire name. Options whose wire name the operation
+ * already declares are skipped so the declared parameter wins.
+ *
+ * @param program - The TypeSpec program.
+ * @param operation - The operation being documented.
+ * @param declared - The query parameters the operation declares.
+ * @param makeRef - A type-reference function for Markdown links.
+ */
+function buildGlobalQueryOptionDocs(
+  program: Program,
+  operation: Operation,
+  declared: HttpParameterDoc[],
+  makeRef: (type: Type) => string,
+): HttpParameterDoc[] {
+  const seen = new Set(declared.map((parameter) => parameter.name));
+  const docs: HttpParameterDoc[] = [];
+
+  for (const model of getGlobalQueryOptions(program, operation)) {
+    for (const property of walkPropertiesInherited(model)) {
+      const name = getQueryParamName(program, property) ?? property.name;
+      if (seen.has(name)) continue;
+      seen.add(name);
+      docs.push({
+        name,
+        type: makeRef(property.type),
+        requiredLabel: property.optional ? "No" : "Yes",
+        summary: getSummary(program, property) ?? getDoc(program, property),
+        summaryOrFallback: describeSummary(program, property),
+      });
+    }
+  }
+
+  return docs;
 }
 
 /**

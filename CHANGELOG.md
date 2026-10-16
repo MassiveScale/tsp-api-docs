@@ -9,6 +9,11 @@ This project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `@globalQueryOptions(...models)` decorator (in `MassiveScale.ApiDocs`) for query options that shared infrastructure handles, such as OData `$filter` and `$top`. Apply it to a namespace, interface, or operation; the nearest one wins. Each model property becomes a row in the operation's **Optional query parameters** table, after the parameters the operation declares, without changing the HTTP model, OpenAPI output, or generated code. Use `PickProperties` to give each operation its own subset. Custom `operation` templates receive the rows as `globalQueryOptions`.
+- The package now has a TypeSpec entry point (`lib/main.tsp`), so `import "@massivescale/tsp-api-docs";` works in `.tsp` files.
+
 ### Changed
 
 - Widened the `@typespec/versioning` peer dependency from `^0.85.0` to `>=0.85.0 <1.0.0`. A caret on a `0.x` version only allows patch releases (`0.85.x`), so projects on `@typespec/versioning` 0.86 or later hit a peer-dependency conflict when installing this emitter.

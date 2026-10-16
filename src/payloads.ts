@@ -50,6 +50,7 @@ import {
   type HttpOperationResponseContent,
   type HttpPayloadBody,
 } from "@typespec/http";
+import { getGlobalQueryOptions } from "./decorators.js";
 import {
   getMergePatchSource,
   isMergePatch,
@@ -348,7 +349,8 @@ export function operationPayloadTypes(httpOperation: HttpOperation): Type[] {
  * When at least one operation resolves to an HTTP operation, a model, union or
  * scalar is documented only if it is reachable from an operation payload: a
  * request body, a response body (with implicit bodies mapped back to their
- * response model), or a parameter type — and transitively a payload property
+ * response model), a parameter type, or the type of a `@globalQueryOptions`
+ * property (the options model itself is not data) — and transitively a payload property
  * type, documented base model, discriminated derived model, array/record
  * element, union variant, or `MergePatchUpdate<T>` source of one of those.
  * Enums are always documented, whether or not they are reachable.
@@ -483,6 +485,12 @@ export function selectDocumentedTypes<
   };
 
   for (const { operation, httpOperation } of operations) {
+    for (const options of getGlobalQueryOptions(program, operation)) {
+      for (const property of walkPropertiesInherited(options)) {
+        visitType(property.type);
+      }
+    }
+
     if (!httpOperation) {
       visitReturnType(operation.returnType);
       for (const property of operation.parameters.properties.values()) {

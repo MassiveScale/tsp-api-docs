@@ -1,8 +1,31 @@
+import "@typespec/http";
 import "@typespec/openapi";
 
+using Http;
 using OpenAPI;
 
 namespace MassiveScale.Sandbox.Api;
+
+/**
+ * Query options handled by shared middleware rather than by each operation.
+ */
+model CommonQueryOptions {
+    @doc("Filters the collection by an expression.")
+    @query("$filter")
+    filter?: string;
+
+    @doc("Maximum number of items to return.")
+    @query("$top")
+    top?: int32;
+
+    @doc("Number of items to skip before returning results.")
+    @query("$skip")
+    skip?: int32;
+
+    @doc("Comma-separated list of properties to include in the response.")
+    @query("$select")
+    select?: string;
+}
 
 /**
  * Base model for all entities in the API.

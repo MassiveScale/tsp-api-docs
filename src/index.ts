@@ -5,4 +5,5 @@
  */
 export { $onEmit } from "./emitter.js";
 export { $lib } from "./lib.js";
+export { $decorators, getGlobalQueryOptions } from "./decorators.js";
 export { $linter } from "./linter.js";

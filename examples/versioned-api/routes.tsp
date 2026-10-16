@@ -1,4 +1,5 @@
 import "@typespec/rest";
+import "@massivescale/tsp-api-docs";
 import "./versioning.tsp";
 import "./common.tsp";
 import "./models.tsp";
@@ -6,6 +7,7 @@ import "./models.tsp";
 using Http;
 using Versioning;
 using OpenAPI;
+using MassiveScale.ApiDocs;
 @service(#{ title: "MassiveScale Sandbox - Pet Store API" })
 @versioned(Versions)
 @externalDocs("https://example.com/docs/petstore", "Full Pet Store API reference")
@@ -16,10 +18,12 @@ namespace MassiveScale.Sandbox.Api;
 @doc("Controller for Store entities.")
 interface Stores {
     @doc("Retrieves a list of all stores.")
+    @globalQueryOptions(CommonQueryOptions)
     @get
     list(): PagedResult<Store>;
 
     @doc("Retrieves a specific store by its unique identifier.")
+    @globalQueryOptions(PickProperties<CommonQueryOptions, "select">)
     @get
     read(@path id: string): Store | ErrorResponse;
 

@@ -11,6 +11,8 @@
 | `src/emitter.ts`            | `$onEmit` entry point — orchestrates the full emit pipeline  |
 | `src/lib.ts`                | Emitter option schema (`ApiDocsEmitterOptions`) and `$lib`   |
 | `src/collect.ts`            | Namespace/operation/type walkers with deduplication          |
+| `src/decorators.ts`         | `$decorators` implementations and their state accessors      |
+| `lib/decorators.tsp`        | `extern dec` declarations in `MassiveScale.ApiDocs`          |
 | `src/service-entry.ts`      | Assembles per-service page models and related-method index   |
 | `src/operation-page.ts`     | Builds `OperationPageModel` for each operation page          |
 | `src/type-page.ts`          | Builds `TypePageModel` for each type page                    |
