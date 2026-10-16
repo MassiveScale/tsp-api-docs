@@ -4,14 +4,17 @@
   "description": "TypeSpec emitter for generating API reference documentation in Markdown for Azure DevOps Wiki, GitHub, and DocFx.",
   "type": "module",
   "main": "dist/src/index.js",
+  "tspMain": "lib/main.tsp",
   "exports": {
     ".": {
+      "typespec": "./lib/main.tsp",
       "types": "./dist/src/index.d.ts",
       "default": "./dist/src/index.js"
     }
   },
   "files": [
     "dist/src/",
+    "lib/",
     "templates/",
     "readme.md",
     "CHANGELOG.md",

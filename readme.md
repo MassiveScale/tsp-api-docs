@@ -20,6 +20,7 @@ Supports multiple output formats targeting Azure DevOps Wiki, GitHub, and DocFx.
 - Configurable `route-prefix` with `{version}` token substitution for HTTP request lines (default: `api/{version}`).
 - Response headers documented per status code, and included in example responses.
 - Query, header, path, and cookie parameters documented by their HTTP wire names (e.g. `$expand`, `If-Match`).
+- `@globalQueryOptions` documents query options handled by shared infrastructure (e.g. OData `$filter`, `$top`) per operation, without adding them to the operation signature. See [Global query options](#global-query-options).
 - Request body examples automatically omit read-only and immutable properties based on HTTP verb visibility.
 - Type names rendered exactly as defined — no CamelCase splitting in page titles.
 - Related-methods table on type pages lists only operations that directly address the type — return it (including through a response model such as `EntityResponse<Widget>`), accept it as a parameter or body (including through `MergePatchUpdate<Widget>`), or use a direct array/record/union of it. Operations that reference the type only through nested properties are excluded, except for one-level wrapper request models that are direct operation parameters (e.g. `CreateWidgetRequest { widget: Widget }`). Types decorated with `@error` are never treated as addressable entities and have no Methods section.
@@ -159,6 +160,58 @@ Each operation page documents the HTTP request and every response:
 - **Response** — what the caller receives on success (the 2xx body types, or `void`), followed by one row per status code with its body type and description. Status codes show their standard reason phrase (e.g. `409 Conflict`, `412 Precondition Failed`).
 - **Response headers** — one table per status code that returns headers (name, type, required, summary).
 - **Examples** — from `@opExample`, or generated from the HTTP metadata. Example requests use wire names (`?$expand=string`), and example responses include response headers (`ETag: string`). When an `@opExample` return value is a response model, its `@body` value becomes the JSON body and its header values become the header lines.
+
+## Global query options
+
+Some query options are handled by shared infrastructure rather than by the operation itself: OData middleware reading `$filter` and `$top`, a gateway reading `api-key`, a filter reading `tenant`. Declaring them with `@query` on every operation would add parameters that generated server code never reads. `@globalQueryOptions` documents them instead, without touching the HTTP model, so OpenAPI output and generated server and client code stay the same.
+
+Define the options once as a model, then say which ones each operation accepts. TypeSpec's built-in `PickProperties` selects a subset:
+
+```typespec
+import "@massivescale/tsp-api-docs";
+
+using Http;
+using MassiveScale.ApiDocs;
+
+model CommonQueryOptions {
+  /** Filters the collection. */
+  @query("$filter") filter?: string;
+  /** Maximum number of items to return. */
+  @query("$top") top?: int32;
+  /** Number of items to skip. */
+  @query("$skip") skip?: int32;
+  /** Properties to include in the response. */
+  @query("$select") select?: string;
+}
+
+@route("/widgets")
+@globalQueryOptions(CommonQueryOptions)
+interface Widgets {
+  @get list(): Widget[];
+
+  @globalQueryOptions(PickProperties<CommonQueryOptions, "select">)
+  @get read(@path id: string): Widget;
+
+  @globalQueryOptions()
+  @delete remove(@path id: string): void;
+}
+```
+
+| Operation | Query options documented              |
+| --------- | ------------------------------------- |
+| `list`    | `$filter`, `$top`, `$skip`, `$select` |
+| `read`    | `$select`                             |
+| `remove`  | none                                  |
+
+How it works:
+
+- Each property of each model becomes a row in the operation's **Optional query parameters** table, after the query parameters the operation declares itself. The decorator adds rows; it never removes declared ones.
+- The wire name comes from `@query("name")`, or the property name when there is no `@query`. The type, required flag, and `@doc` / `@summary` come from the property.
+- When a declared query parameter and a global option share a wire name, the declared parameter wins. When two models given to one decorator share a wire name, the first wins.
+- The decorator can go on a namespace, an interface, or an operation. The nearest one replaces the outer ones; they are not added together. `@globalQueryOptions()` with no arguments means the operation takes none.
+- Global options are not added to the HTTP request line or to example requests, because they are not part of the operation's route.
+
+Avoid naming the model `QueryOptions`: with `using Http;` it clashes with `TypeSpec.Http.QueryOptions`.
 
 ## Output Formats
 
@@ -364,7 +417,7 @@ All templates receive the standard view model for their page type. The following
 
 Refer to the built-in templates in `templates/` for the full variable list for each page type.
 
-The `operation` template also receives `pathParameters`, `optionalQueryParameters`, `requestHeaders`, and `requestCookies` (each a list of `name`/`type`/`requiredLabel`/`summaryOrFallback`, keyed by wire name), `parameters` (every TypeSpec parameter by TypeSpec name), and `responses`, where each response has `statusCode`, `type`, `description`, and `headers`. `responseHeaders` lists every response header across all status codes.
+The `operation` template also receives `pathParameters`, `optionalQueryParameters`, `globalQueryOptions`, `requestHeaders`, and `requestCookies` (each a list of `name`/`type`/`requiredLabel`/`summaryOrFallback`, keyed by wire name), `parameters` (every TypeSpec parameter by TypeSpec name), and `responses`, where each response has `statusCode`, `type`, `description`, and `headers`. `responseHeaders` lists every response header across all status codes.
 
 ## Contributing
 
