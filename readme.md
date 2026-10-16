@@ -141,6 +141,7 @@ Metadata never appears in a type's property table, JSON representation, or relat
 When the service has HTTP operations, a model, union, or scalar gets a page only if an operation reaches it:
 
 - a request body, a response body (as resolved above), or a parameter type;
+- the type of a property of an applicable [`@globalQueryOptions`](#global-query-options) model (the options model itself gets no page);
 - transitively, a property type, base model, array/record element, union variant, or `MergePatchUpdate<T>` source of one of those;
 - every derived model of a reachable `@discriminator` base. A derived model that is itself a response model (e.g. `model OddPet extends Pet { kind: "odd"; @body body: Toy; }`) still gets no page.
 

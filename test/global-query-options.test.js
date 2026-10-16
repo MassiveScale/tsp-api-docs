@@ -353,6 +353,31 @@ describe("@globalQueryOptions", () => {
     );
   });
 
+  it("documents a type referenced only by a global option", async () => {
+    const outputs = await emitHttp(`
+      union SortOrder { "asc", "desc" }
+
+      model Sorting {
+        /** Sort direction. */
+        @query("$orderby") orderBy?: SortOrder;
+      }
+
+      @route("/widgets")
+      interface Widgets {
+        @globalQueryOptions(Sorting)
+        @get list(): Widget[];
+      }
+    `);
+
+    assert.ok(outputs["widget-api/resources/SortOrder.md"]);
+    assert.equal(outputs["widget-api/resources/Sorting.md"], undefined);
+    assert.ok(
+      rows(querySection(outputs["widget-api/api/Widgets-List.md"])).includes(
+        "| $orderby | [SortOrder](../resources/SortOrder.md) | No | Sort direction. |",
+      ),
+    );
+  });
+
   it("rejects arguments that are not models", async () => {
     const diagnostics = await httpTester.diagnose(`
       using MassiveScale.ApiDocs;
