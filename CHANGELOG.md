@@ -7,7 +7,7 @@ This project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
-## [Unreleased]
+## [v1.1.0] — Global Query Options and Payload-Only Type Pages
 
 ### Added
 
