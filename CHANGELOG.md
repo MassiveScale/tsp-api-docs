@@ -19,6 +19,8 @@ This project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - Operation pages get a **Polymorphic payloads** section, and the request body description names the discriminator values. When the request or primary response body is polymorphic, synthetic examples are generated once per variant (`Example 1: Dog`, `Example 2: Cat`, ...).
   - The relation diagram links derived models to their base (`Dog |o..|| Pet : "extends (kind = dog)"`) and discriminated unions to their variants, and marks discriminator attributes.
   - Custom templates get the new `discriminator`, `derivedTypes`, `discriminatorValues`, `polymorphicMethods`, and `variantRepresentations` fields on type pages, `discriminatorValue` on union variants, and `polymorphicPayloads` on operation pages.
+- Property and parameter tables now state the rules a value must follow, after the `@doc` text: default value, read-only / write-only / set-on-create visibility, `#deprecated`, `@secret`, `@format`, `@minLength` / `@maxLength`, `@pattern`, `@minValue` / `@maxValue` (and exclusive forms), `@minItems` / `@maxItems`, and `@encode`. A scalar's page lists its own rules on a `Constraints:` line. See "Property rules" in the README.
+  - Custom templates get `rules` and `description` on each property and parameter row, and `rules` on scalar type pages. The built-in templates show `description` in the Summary column; `summaryOrFallback` is unchanged, so custom templates keep their current output.
 - The `versioned-api` example now includes a discriminated model hierarchy (`Notification`, with `PushNotification` added in v2.0) and two discriminated unions (`PaymentMethod` without an envelope, `OrderEvent` with one).
 
 ### Changed
@@ -45,6 +47,7 @@ This project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `@encodedName("application/json", ...)` was ignored, so property tables and examples showed the TypeSpec name instead of the wire name. Property tables, JSON representations, examples, and the relation diagram now use the JSON wire name.
 - Response examples included write-only properties (e.g. a `@visibility(Lifecycle.Create)` password). They now use read visibility, the same way request examples already used the verb's request visibility.
 - Sample values were type names rather than valid values: `"utcDateTime"`, `"duration"`, `"bytes"`, and `since=utcDateTime` in query strings. They are now real values in the wire format (RFC 3339 dates, RFC 7231 in headers, ISO 8601 durations, base64 bytes), honouring `@encode`, `@format`, `@minLength` / `@maxLength`, `@minValue` / `@maxValue`, and declared defaults. See "Sample values" in the README.
+- Table cells doubled every backslash, so a backslash inside a code span (such as a regular expression) rendered twice. Only a backslash directly before a pipe is doubled now.
 - Request examples listed `Content-Type` twice when the operation declares a `@header contentType` parameter.
 - **Changed output:** in the relation diagram, a model whose base is in the diagram now lists only its own properties and gets an `extends` line to its base, instead of repeating every inherited property.
 

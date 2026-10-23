@@ -167,6 +167,30 @@ Each operation page documents the HTTP request and every response:
 - **Polymorphic payloads** — present when a body is a discriminated type. See [Discriminated types](#discriminated-types).
 - **Examples** — from `@opExample`, or generated from the HTTP metadata (one per variant for a polymorphic body). Example requests use wire names (`?$expand=string`), and example responses include response headers (`ETag: string`). When an `@opExample` return value is a response model, its `@body` value becomes the JSON body and its header values become the header lines.
 
+## Property rules
+
+The Summary column of every property and parameter table (type properties, path, query, header and cookie parameters, global query options, and response headers) adds the rules a value must follow after the `@doc` text:
+
+| Source                                          | Example                             |
+| ----------------------------------------------- | ----------------------------------- |
+| `#deprecated "Use name."`                       | `Deprecated: Use name.`             |
+| `@visibility(Lifecycle.Read)`                   | `Read-only.`                        |
+| `@visibility(Lifecycle.Create)`                 | `Write-only; never returned.`       |
+| `@visibility(Lifecycle.Read, Lifecycle.Create)` | `Set on create; can't be changed.`  |
+| `count?: int32 = 5`                             | ``Default: `5`.``                   |
+| `@format("uuid")`                               | ``Format: `uuid`.``                 |
+| `@minLength(3) @maxLength(50)`                  | `3 to 50 characters.`               |
+| `@pattern("^[A-Z]{3}-\\d+$")`                   | ``Must match `^[A-Z]{3}-\d+$`.``    |
+| `@minValue(0) @maxValue(100)`                   | `Minimum 0, maximum 100.`           |
+| `@minValueExclusive(0)`                         | `Greater than 0.`                   |
+| `@minItems(1) @maxItems(3)`                     | `1 to 3 items.`                     |
+| `@encode(DurationKnownEncoding.seconds, int32)` | ``Encoded as `seconds` (`int32`).`` |
+| `@secret`                                       | `Sensitive: treat as a secret.`     |
+
+- Constraints and `@encode` are read from the property first, then from its scalar's declaration chain. A property typed as `scalar Sku extends string` with `@pattern` shows the pattern, and the scalar's own page lists its rules on a `Constraints:` line.
+- Read-only and write-only notes appear on model properties only, not on parameters.
+- Custom templates get each row's rules as `rules` and the combined text as `description`. `summary` and `summaryOrFallback` are unchanged; the built-in templates now show `description`.
+
 ## Sample values
 
 JSON representations and generated examples use values a client can send as they are:

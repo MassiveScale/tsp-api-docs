@@ -28,6 +28,10 @@ Path: {{join breadcrumbs " > "}}
 Base type: {{baseType}}
 
 {{/if}}
+{{#if rules}}
+Constraints: {{rules}}
+
+{{/if}}
 {{#if additionalProperties}}
 Additional properties: {{additionalProperties}}. Besides the properties below, the object can hold any other property of this type.
 
@@ -80,7 +84,7 @@ These methods use a polymorphic type that can carry this type, selected by its d
 | Name | Type | Required | Summary |
 | - | - | - | - |
 {{#each properties}}
-| {{mdCell name}} | {{mdCell type}} | {{mdCell requiredLabel}} | {{mdCell summaryOrFallback}} |
+| {{mdCell name}} | {{mdCell type}} | {{mdCell requiredLabel}} | {{mdCell description}} |
 {{/each}}
 
 {{/if}}

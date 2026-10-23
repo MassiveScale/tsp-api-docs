@@ -851,7 +851,7 @@ function numericPlaceholder(
  * @param property - The property the scalar came from, if any.
  * @param read - The compiler accessor for the constraint (e.g. `getMinValue`).
  */
-function constraint<T>(
+export function constraint<T>(
   program: Program,
   type: Scalar,
   property: ModelProperty | undefined,
@@ -878,7 +878,7 @@ function constraint<T>(
  * @param type - The scalar type.
  * @param property - The property the scalar came from, if any.
  */
-function resolveEncode(
+export function resolveEncode(
   program: Program,
   type: Scalar,
   property: ModelProperty | undefined,

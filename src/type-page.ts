@@ -42,6 +42,10 @@ import {
   formatExternalDocsLink,
 } from "./utils.js";
 import { propertyDocs } from "./operation-page.js";
+import {
+  composeDescription,
+  describePropertyRules,
+} from "./property-details.js";
 import type { ParameterDoc } from "./operation-page.js";
 import {
   additionalPropertiesType,
@@ -201,6 +205,11 @@ export interface TypePageModel {
    * a model accepts beside its declared ones (`...Record<string>`), if any.
    */
   additionalProperties?: string;
+  /**
+   * For a scalar, the rules its values follow (`@format`, `@pattern`, length,
+   * range, `@encode`, `@secret`) as sentences; `undefined` for other kinds.
+   */
+  rules?: string;
   /**
    * Polymorphic types that select this type by a discriminator value, nearest
    * first (e.g. `kind` is `"dog"` in `Pet`).
@@ -387,6 +396,7 @@ export function buildTypePage(
     kind: type.kind,
     breadcrumbs: breadcrumbsForType(program, type),
     baseType: type.baseScalar ? makeRef(type.baseScalar) : undefined,
+    rules: describePropertyRules(program, type),
     properties: [],
     methods,
     ...polymorphism,
@@ -436,8 +446,10 @@ function modelPropertyDocs(
       discriminators.has(property.name) &&
       !docs[index].summary
     ) {
-      docs[index].summaryOrFallback =
-        `Discriminator. Always \`${formatDiscriminatorValue(value)}\` for this type.`;
+      setGeneratedSummary(
+        docs[index],
+        `Discriminator. Always \`${formatDiscriminatorValue(value)}\` for this type.`,
+      );
     }
   });
 
@@ -454,9 +466,10 @@ function modelPropertyDocs(
             .join(" | ") || "string",
         requiredLabel: "Yes",
         summaryOrFallback: summary,
+        description: summary,
       });
     } else if (!doc.summary) {
-      doc.summaryOrFallback = summary;
+      setGeneratedSummary(doc, summary);
     }
   }
 
@@ -472,6 +485,18 @@ function modelPropertyDocs(
     (doc) => doc.name,
     discriminatorPropertyNames(program, model),
   ).map((doc) => ({ ...doc, name: wireNames.get(doc.name) ?? doc.name }));
+}
+
+/**
+ * Gives a property row without a `@doc` a generated summary, keeping its rule
+ * sentences after it.
+ *
+ * @param doc - The property row to update.
+ * @param summary - The generated summary.
+ */
+function setGeneratedSummary(doc: ParameterDoc, summary: string): void {
+  doc.summaryOrFallback = summary;
+  doc.description = composeDescription(summary, doc.rules);
 }
 
 /**

@@ -21,6 +21,10 @@ import {
 } from "@typespec/http";
 import { getGlobalQueryOptions } from "./decorators.js";
 import {
+  composeDescription,
+  describePropertyRules,
+} from "./property-details.js";
+import {
   describePolymorphism,
   describeVariants,
   describeWireShape,
@@ -61,6 +65,17 @@ export interface ParameterDoc {
   summary?: string;
   /** Summary falling back to {@link FALLBACK_SUMMARY} when absent. */
   summaryOrFallback: string;
+  /**
+   * The rules the value must follow — default, constraints, encoding, and so
+   * on — as sentences (see `describePropertyRules`), if any.
+   */
+  rules?: string;
+  /**
+   * The summary followed by {@link rules}: what the built-in templates show
+   * in the Summary column. Falls back to {@link FALLBACK_SUMMARY} only when
+   * there is neither.
+   */
+  description: string;
 }
 
 /**
@@ -79,6 +94,17 @@ export interface HttpParameterDoc {
   summary?: string;
   /** Summary falling back to {@link FALLBACK_SUMMARY} when absent. */
   summaryOrFallback: string;
+  /**
+   * The rules the value must follow — default, constraints, encoding, and so
+   * on — as sentences (see `describePropertyRules`), if any.
+   */
+  rules?: string;
+  /**
+   * The summary followed by {@link rules}: what the built-in templates show
+   * in the Summary column. Falls back to {@link FALLBACK_SUMMARY} only when
+   * there is neither.
+   */
+  description: string;
 }
 
 /**
@@ -331,7 +357,9 @@ export function modelProperties(
   model: Model,
   makeRef: (type: Type) => string,
 ): ParameterDoc[] {
-  return propertyDocs(program, walkPropertiesInherited(model), makeRef);
+  return propertyDocs(program, walkPropertiesInherited(model), makeRef, {
+    visibility: false,
+  });
 }
 
 /**
@@ -346,14 +374,40 @@ export function propertyDocs(
   program: Program,
   properties: Iterable<ModelProperty>,
   makeRef: (type: Type) => string,
+  options: { visibility?: boolean } = {},
 ): ParameterDoc[] {
   return [...properties].map((property) => ({
     name: property.name,
     type: makeRef(property.type),
     requiredLabel: property.optional ? "No" : "Yes",
-    summary: getSummary(program, property) ?? getDoc(program, property),
-    summaryOrFallback: describeSummary(program, property),
+    ...summaryFields(program, property, options),
   }));
+}
+
+/**
+ * Builds the summary, rules, and description fields shared by
+ * {@link ParameterDoc} and {@link HttpParameterDoc}.
+ *
+ * @param program - The TypeSpec program.
+ * @param property - The property or parameter.
+ * @param options - `visibility: false` leaves out read-only / write-only notes.
+ */
+function summaryFields(
+  program: Program,
+  property: ModelProperty,
+  options: { visibility?: boolean } = {},
+): Pick<
+  ParameterDoc,
+  "summary" | "summaryOrFallback" | "rules" | "description"
+> {
+  const summary = getSummary(program, property) ?? getDoc(program, property);
+  const rules = describePropertyRules(program, property, options);
+  return {
+    summary,
+    summaryOrFallback: describeSummary(program, property),
+    rules,
+    description: composeDescription(summary, rules),
+  };
 }
 
 /**
@@ -475,10 +529,7 @@ function buildHttpParameterDocs(
       name: parameter.name,
       type: makeRef(parameter.param.type),
       requiredLabel: parameter.param.optional ? "No" : "Yes",
-      summary:
-        getSummary(program, parameter.param) ??
-        getDoc(program, parameter.param),
-      summaryOrFallback: describeSummary(program, parameter.param),
+      ...summaryFields(program, parameter.param, { visibility: false }),
     }));
 }
 
@@ -510,8 +561,7 @@ function buildGlobalQueryOptionDocs(
         name,
         type: makeRef(property.type),
         requiredLabel: property.optional ? "No" : "Yes",
-        summary: getSummary(program, property) ?? getDoc(program, property),
-        summaryOrFallback: describeSummary(program, property),
+        ...summaryFields(program, property, { visibility: false }),
       });
     }
   }
@@ -650,8 +700,7 @@ function responseHeaderDocs(
           name,
           type: makeRef(prop.type),
           requiredLabel: prop.optional ? "No" : "Yes",
-          summary: getSummary(program, prop) ?? getDoc(program, prop),
-          summaryOrFallback: describeSummary(program, prop),
+          ...summaryFields(program, prop, { visibility: false }),
         });
       }
     }
