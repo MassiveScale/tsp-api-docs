@@ -7,12 +7,10 @@ This project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
-## [v1.1.0] — Global Query Options and Payload-Only Type Pages
+## [v1.2.0] — Discriminated Types, Valid Payloads, and Property Rules
 
 ### Added
 
-- `@globalQueryOptions(...models)` decorator (in `MassiveScale.ApiDocs`) for query options that shared infrastructure handles, such as OData `$filter` and `$top`. Apply it to a namespace, interface, or operation; the nearest one wins. Each model property becomes a row in the operation's **Optional query parameters** table, after the parameters the operation declares, without changing the HTTP model, OpenAPI output, or generated code. Use `PickProperties` to give each operation its own subset. Custom `operation` templates receive the rows as `globalQueryOptions`.
-- The package now has a TypeSpec entry point (`lib/main.tsp`), so `import "@massivescale/tsp-api-docs";` works in `.tsp` files.
 - Discriminated types are documented as polymorphic payloads, for both `@discriminator` model hierarchies and `@discriminated` unions (with or without an envelope). See "Discriminated types" in the README.
   - A polymorphic type's page names its discriminator, lists its **Derived types** (or, for a union, adds a discriminator value column to **Variants**), and shows one **JSON representation** per variant. A base model that leaves its discriminator undeclared gets a property row for it.
   - A derived model's or variant's page shows its **Discriminator value** and links to the polymorphic type. A new **Polymorphic methods** table lists the operations that reach the type through that polymorphic type (e.g. `get(): Pet` on the `Dog` page).
@@ -22,6 +20,30 @@ This project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Property and parameter tables now state the rules a value must follow, after the `@doc` text: default value, read-only / write-only / set-on-create visibility, `#deprecated`, `@secret`, `@format`, `@minLength` / `@maxLength`, `@pattern`, `@minValue` / `@maxValue` (and exclusive forms), `@minItems` / `@maxItems`, and `@encode`. A scalar's page lists its own rules on a `Constraints:` line. See "Property rules" in the README.
   - Custom templates get `rules` and `description` on each property and parameter row, and `rules` on scalar type pages. The built-in templates show `description` in the Summary column; `summaryOrFallback` is unchanged, so custom templates keep their current output.
 - The `versioned-api` example now includes a discriminated model hierarchy (`Notification`, with `PushNotification` added in v2.0) and two discriminated unions (`PaymentMethod` without an envelope, `OrderEvent` with one).
+
+### Changed
+
+- **Behavior change:** In the relation diagram, a model whose base is in the diagram now lists only its own properties and gets an `extends` line to its base, instead of repeating every inherited property.
+
+### Fixed
+
+- Synthetic JSON for a polymorphic type was invalid: a `@discriminator` base rendered without its discriminator (`{ "id": "string", "name": "string" }` for `Pet`), and a `@discriminated` union rendered as its first variant's bare properties, ignoring the discriminator and the envelope. A client copying either got an error. Request and response bodies, examples, type pages, and nested properties now render a real variant with its discriminator set and listed first (`{ "kind": "dog", ... }`, or `{ "kind": "created", "value": { ... } }` for an object envelope). A polymorphic array shows one item per variant.
+- A property typed as an enum member (`kind: PetKind.dog`) rendered as `"Demo.PetKind.dog"` in JSON and `Demo.PetKind.dog` in property tables. JSON now shows the member's value (`"dog"`), and tables show `[PetKind](PetKind.md).dog`. The relation diagram shows the enum's name instead of `unknown`.
+- A model that declares properties and also accepts others (`model Bag { name: string; ...Record<string>; }`, or `extends Record<string>`) was treated as a plain record: it got no page, every reference showed `Record<string, string>`, and its declared properties disappeared from examples. It now gets a page with its properties and an `Additional properties:` line, and examples show its properties plus one `"additionalProperty"`.
+- `@encodedName("application/json", ...)` was ignored, so property tables and examples showed the TypeSpec name instead of the wire name. Property tables, JSON representations, examples, and the relation diagram now use the JSON wire name.
+- Response examples included write-only properties (e.g. a `@visibility(Lifecycle.Create)` password). They now use read visibility, the same way request examples already used the verb's request visibility.
+- Sample values were type names rather than valid values: `"utcDateTime"`, `"duration"`, `"bytes"`, and `since=utcDateTime` in query strings. They are now real values in the wire format (RFC 3339 dates, RFC 7231 in headers, ISO 8601 durations, base64 bytes), honouring `@encode`, `@format`, `@minLength` / `@maxLength`, `@minValue` / `@maxValue`, and declared defaults. See "Sample values" in the README.
+- Table cells doubled every backslash, so a backslash inside a code span (such as a regular expression) rendered twice. Only a backslash directly before a pipe is doubled now.
+- Request examples listed `Content-Type` twice when the operation declares a `@header contentType` parameter.
+
+---
+
+## [v1.1.0] — Global Query Options and Payload-Only Type Pages
+
+### Added
+
+- `@globalQueryOptions(...models)` decorator (in `MassiveScale.ApiDocs`) for query options that shared infrastructure handles, such as OData `$filter` and `$top`. Apply it to a namespace, interface, or operation; the nearest one wins. Each model property becomes a row in the operation's **Optional query parameters** table, after the parameters the operation declares, without changing the HTTP model, OpenAPI output, or generated code. Use `PickProperties` to give each operation its own subset. Custom `operation` templates receive the rows as `globalQueryOptions`.
+- The package now has a TypeSpec entry point (`lib/main.tsp`), so `import "@massivescale/tsp-api-docs";` works in `.tsp` files.
 
 ### Changed
 
@@ -41,15 +63,6 @@ This project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Response headers are now documented per status code on operation pages (name, type, required, description) and included in the example HTTP response (e.g. `ETag: string`). When an `@opExample` returns a response model, its `@body` value is used as the JSON body and its header values as header lines, instead of the whole model being printed as the body.
 - Query parameters use their wire name (`@query(#{ name: "$expand" })` documents `$expand`, not `expand`) in the query parameter table, the example request (`?$expand=string`), and the URI template, which now renders `{?$expand}` instead of `{?%24expand}`. Array query parameters render as `name=a,b`, or `name=a&name=b` with `explode: true`. Path parameters also use their wire name in examples.
 - Every IANA-registered HTTP status code now renders with its reason phrase (e.g. `409 Conflict`, `412 Precondition Failed`), not just the nine most common ones.
-- Synthetic JSON for a polymorphic type was invalid: a `@discriminator` base rendered without its discriminator (`{ "id": "string", "name": "string" }` for `Pet`), and a `@discriminated` union rendered as its first variant's bare properties, ignoring the discriminator and the envelope. A client copying either got an error. Request and response bodies, examples, type pages, and nested properties now render a real variant with its discriminator set and listed first (`{ "kind": "dog", ... }`, or `{ "kind": "created", "value": { ... } }` for an object envelope). A polymorphic array shows one item per variant.
-- A property typed as an enum member (`kind: PetKind.dog`) rendered as `"Demo.PetKind.dog"` in JSON and `Demo.PetKind.dog` in property tables. JSON now shows the member's value (`"dog"`), and tables show `[PetKind](PetKind.md).dog`. The relation diagram shows the enum's name instead of `unknown`.
-- A model that declares properties and also accepts others (`model Bag { name: string; ...Record<string>; }`, or `extends Record<string>`) was treated as a plain record: it got no page, every reference showed `Record<string, string>`, and its declared properties disappeared from examples. It now gets a page with its properties and an `Additional properties:` line, and examples show its properties plus one `"additionalProperty"`.
-- `@encodedName("application/json", ...)` was ignored, so property tables and examples showed the TypeSpec name instead of the wire name. Property tables, JSON representations, examples, and the relation diagram now use the JSON wire name.
-- Response examples included write-only properties (e.g. a `@visibility(Lifecycle.Create)` password). They now use read visibility, the same way request examples already used the verb's request visibility.
-- Sample values were type names rather than valid values: `"utcDateTime"`, `"duration"`, `"bytes"`, and `since=utcDateTime` in query strings. They are now real values in the wire format (RFC 3339 dates, RFC 7231 in headers, ISO 8601 durations, base64 bytes), honouring `@encode`, `@format`, `@minLength` / `@maxLength`, `@minValue` / `@maxValue`, and declared defaults. See "Sample values" in the README.
-- Table cells doubled every backslash, so a backslash inside a code span (such as a regular expression) rendered twice. Only a backslash directly before a pipe is doubled now.
-- Request examples listed `Content-Type` twice when the operation declares a `@header contentType` parameter.
-- **Changed output:** in the relation diagram, a model whose base is in the diagram now lists only its own properties and gets an `extends` line to its base, instead of repeating every inherited property.
 
 ---
 
