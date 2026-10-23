@@ -4,8 +4,18 @@ import {
   type Program,
   type Type,
 } from "@typespec/compiler";
+import {
+  discriminatorPropertyNames,
+  getPolymorphicInfo,
+  inheritanceMemberships,
+  withNamesFirst,
+} from "./discriminators.js";
 import type { OutputFormat } from "./lib.js";
-import { payloadProperties } from "./payloads.js";
+import {
+  isPayloadProperty,
+  payloadBaseModel,
+  payloadProperties,
+} from "./payloads.js";
 import type { ServiceEntry } from "./service-entry.js";
 import { arrayElementType } from "./type-ref.js";
 
@@ -57,9 +67,36 @@ export function buildRelationDiagram(
       !isArrayModelType(program, type) &&
       !isRecordModelType(program, type)
     ) {
-      for (const prop of payloadProperties(program, type)) {
+      // A derived model shows only its own properties and an "extends" line;
+      // the inherited ones are on the base entity.
+      const base = payloadBaseModel(program, type);
+      const inheritsInDiagram = Boolean(base && knownTypeNames.has(base.name));
+      const properties = inheritsInDiagram
+        ? [...type.properties.values()].filter((prop) =>
+            isPayloadProperty(program, prop),
+          )
+        : payloadProperties(program, type);
+      const discriminators = discriminatorPropertyNames(program, type);
+      const polymorphic = getPolymorphicInfo(program, type);
+
+      if (base && inheritsInDiagram) {
+        const [membership] = inheritanceMemberships(program, type);
+        const label = membership
+          ? `extends (${membership.info.propertyName} = ${membership.value})`
+          : "extends";
+        relationships.push(`  ${name} |o..|| ${base.name} : ${erLabel(label)}`);
+      }
+
+      for (const prop of withNamesFirst(
+        properties,
+        (prop) => prop.name,
+        discriminators,
+      )) {
         const attrType = erAttrType(program, prop.type);
-        attrs.push(`    ${attrType} ${sanitizeErName(prop.name)}`);
+        const comment = discriminators.includes(prop.name)
+          ? ` "discriminator"`
+          : "";
+        attrs.push(`    ${attrType} ${sanitizeErName(prop.name)}${comment}`);
 
         const relTarget = resolveErRelationTarget(
           program,
@@ -78,9 +115,46 @@ export function buildRelationDiagram(
           }
         }
       }
+
+      // A base may leave its own discriminator undeclared; it is still on the
+      // wire, after any discriminators inherited from further up.
+      if (
+        polymorphic &&
+        !properties.some((prop) => prop.name === polymorphic.propertyName)
+      ) {
+        const inheritedDiscriminators = properties.filter((prop) =>
+          discriminators.includes(prop.name),
+        ).length;
+        attrs.splice(
+          inheritedDiscriminators,
+          0,
+          `    string ${sanitizeErName(polymorphic.propertyName)} "discriminator"`,
+        );
+      }
     } else if (type.kind === "Enum") {
       for (const member of type.members.values()) {
         attrs.push(`    string ${sanitizeErName(member.name)}`);
+      }
+    } else if (type.kind === "Union" && getPolymorphicInfo(program, type)) {
+      // A discriminated union links to each variant type, labelled with the
+      // discriminator value that selects it.
+      const polymorphic = getPolymorphicInfo(program, type)!;
+      attrs.push(
+        `    string ${sanitizeErName(polymorphic.propertyName)} "discriminator"`,
+      );
+      for (const variant of polymorphic.variants) {
+        const target = resolveErRelationTarget(
+          program,
+          variant.type,
+          knownTypeNames,
+        );
+        if (target && !target.isArray) {
+          relationships.push(
+            `  ${target.typeName} |o..|| ${name} : ${erLabel(`${polymorphic.propertyName} = ${variant.value}`)}`,
+          );
+        } else {
+          attrs.push(`    string ${sanitizeErName(variant.value)}`);
+        }
       }
     } else if (type.kind === "Union") {
       for (const [variantName] of type.variants) {
@@ -186,6 +260,8 @@ function erAttrType(program: Program, type: Type): string {
       return "object";
     case "Enum":
       return sanitizeErName(type.name);
+    case "EnumMember":
+      return sanitizeErName(type.enum.name);
     case "Union":
       if (type.name) return sanitizeErName(type.name);
       return "union";
@@ -198,6 +274,16 @@ function erAttrType(program: Program, type: Type): string {
     default:
       return "unknown";
   }
+}
+
+/**
+ * Quotes a Mermaid ER relationship label. Double quotes inside the label are
+ * replaced with single quotes, because Mermaid labels cannot escape them.
+ *
+ * @param label - The raw label text.
+ */
+function erLabel(label: string): string {
+  return `"${label.replace(/"/g, "'")}"`;
 }
 
 /**

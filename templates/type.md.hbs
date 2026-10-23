@@ -28,6 +28,14 @@ Path: {{join breadcrumbs " > "}}
 Base type: {{baseType}}
 
 {{/if}}
+{{#if discriminator}}
+Discriminator: `{{discriminator.propertyName}}`
+
+{{/if}}
+{{#each discriminatorValues}}
+Discriminator value: `{{propertyName}}` = `{{value}}` in {{polymorphicType}}
+
+{{/each}}
 {{#if methods.length}}
 ## Methods
 
@@ -35,6 +43,30 @@ Base type: {{baseType}}
 | - | - | - |
 {{#each methods}}
 | [{{mdCell name}}]({{path}}) | {{mdCell returnType}} | {{mdCell summaryOrFallback}} |
+{{/each}}
+
+{{/if}}
+{{#if polymorphicMethods.length}}
+## Polymorphic methods
+
+These methods use a polymorphic type that can carry this type, selected by its discriminator value.
+
+| Method | Via | Returns | Summary |
+| - | - | - | - |
+{{#each polymorphicMethods}}
+| [{{mdCell name}}]({{path}}) | {{mdCell via}} | {{mdCell returnType}} | {{mdCell summaryOrFallback}} |
+{{/each}}
+
+{{/if}}
+{{#if derivedTypes.length}}
+## Derived types
+
+{{discriminator.description}}
+
+| `{{discriminator.propertyName}}` | Type | Summary |
+| - | - | - |
+{{#each derivedTypes}}
+| `{{mdCell value}}` | {{mdCell type}} | {{mdCell summaryOrFallback}} |
 {{/each}}
 
 {{/if}}
@@ -51,11 +83,21 @@ Base type: {{baseType}}
 {{#if variants.length}}
 ## Variants
 
+{{#if discriminator}}
+{{discriminator.description}}
+
+| `{{discriminator.propertyName}}` | Type | Summary |
+| - | - | - |
+{{#each variants}}
+| `{{mdCell discriminatorValue}}` | {{mdCell type}} | {{mdCell summaryOrFallback}} |
+{{/each}}
+{{else}}
 | Name | Type | Summary |
 | - | - | - |
 {{#each variants}}
 | {{mdCell name}} | {{mdCell type}} | {{mdCell summaryOrFallback}} |
 {{/each}}
+{{/if}}
 
 {{/if}}
 {{#if members.length}}
@@ -68,7 +110,20 @@ Base type: {{baseType}}
 {{/each}}
 
 {{/if}}
-{{#if jsonRepresentation}}
+{{#if variantRepresentations.length}}
+## JSON representation
+
+{{#each variantRepresentations}}
+### {{title}}
+
+{{description}}
+
+```json
+{{json}}
+```
+
+{{/each}}
+{{else if jsonRepresentation}}
 ## JSON representation
 
 ```json

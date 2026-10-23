@@ -15,8 +15,15 @@ import {
   type Union,
 } from "@typespec/compiler";
 import { isVisible, type Visibility } from "@typespec/http";
+import {
+  discriminatorPropertyNames,
+  getPolymorphicVariants,
+  withNamesFirst,
+  type PolymorphicInfo,
+  type PolymorphicVariant,
+} from "./discriminators.js";
 import { payloadProperties } from "./payloads.js";
-import { namespaceName } from "./utils.js";
+import { asRecord, namespaceName } from "./utils.js";
 
 /**
  * Returns the element type of an array model.
@@ -111,6 +118,8 @@ export function typeReference(program: Program, type: Type): string {
         .join("; ")} }`;
     case "Enum":
       return type.name;
+    case "EnumMember":
+      return `${type.enum.name}.${type.name}`;
     case "Scalar":
       return type.name;
     default:
@@ -182,6 +191,8 @@ export function makeLinkedTypeRef(
         if (path) return `[${type.name}](${pathAdjuster(path)})`;
         return type.name;
       }
+      case "EnumMember":
+        return `${linkedRef(type.enum)}.${type.name}`;
       case "Scalar": {
         const path = typePathById.get(entityId(program, type));
         if (path) return `[${type.name}](${pathAdjuster(path)})`;
@@ -256,8 +267,24 @@ export function jsonRepresentationForType(
 
   switch (type.kind) {
     case "Model": {
+      // A polymorphic base is never sent as itself: show its first variant.
+      const polymorphic = getPolymorphicVariants(program, type);
+      if (polymorphic) {
+        return jsonValueForPolymorphicVariant(
+          program,
+          polymorphic,
+          polymorphic.variants[0],
+          visited,
+          visibilityFilter,
+        );
+      }
+
       const jsonObject: Record<string, unknown> = {};
-      for (const property of payloadProperties(program, type)) {
+      for (const property of withNamesFirst(
+        payloadProperties(program, type),
+        (property) => property.name,
+        discriminatorPropertyNames(program, type),
+      )) {
         if (
           visibilityFilter !== undefined &&
           !isVisible(program, property, visibilityFilter)
@@ -280,6 +307,16 @@ export function jsonRepresentationForType(
       return firstMember?.value ?? firstMember?.name ?? type.name;
     }
     case "Union": {
+      const polymorphic = getPolymorphicVariants(program, type);
+      if (polymorphic) {
+        return jsonValueForPolymorphicVariant(
+          program,
+          polymorphic,
+          polymorphic.variants[0],
+          visited,
+          visibilityFilter,
+        );
+      }
       // Use the first variant as the representative example.
       const firstVariant = [...type.variants.values()][0];
       return firstVariant
@@ -336,10 +373,27 @@ export function jsonValueForType(
       return type.values.map((value) =>
         jsonValueForType(program, value, visited, visibilityFilter),
       );
+    case "EnumMember":
+      return type.value ?? type.name;
     case "Model":
       if (isArrayModelType(program, type)) {
         if (visited.has(type)) return [];
         const itemType = arrayElementType(type);
+        // A polymorphic array shows one item of every variant.
+        const polymorphic = itemType
+          ? getPolymorphicVariants(program, itemType)
+          : undefined;
+        if (polymorphic && itemType && !visited.has(itemType)) {
+          return polymorphic.variants.map((variant) =>
+            jsonValueForPolymorphicVariant(
+              program,
+              polymorphic,
+              variant,
+              new Set(visited).add(type).add(itemType),
+              visibilityFilter,
+            ),
+          );
+        }
         return [
           itemType
             ? jsonValueForType(
@@ -374,6 +428,14 @@ export function jsonValueForType(
       );
     case "Union": {
       if (visited.has(type)) return typeReference(program, type);
+      if (getPolymorphicVariants(program, type)) {
+        return jsonRepresentationForType(
+          program,
+          type,
+          new Set(visited),
+          visibilityFilter,
+        );
+      }
       const firstVariant = [...type.variants.values()][0];
       return firstVariant
         ? jsonValueForType(
@@ -396,6 +458,52 @@ export function jsonValueForType(
     default:
       return typeReference(program, type);
   }
+}
+
+/**
+ * Produces the JSON value sent for one variant of a polymorphic type, with the
+ * discriminator set to the variant's value and listed first.
+ *
+ * - `@discriminator` models and `@discriminated` unions without an envelope
+ *   put the discriminator beside the variant's own properties:
+ *   `{ "kind": "dog", "barkVolume": 0 }`.
+ * - `@discriminated` unions with `envelope: "object"` (the default) wrap the
+ *   variant: `{ "kind": "circle", "value": { "radius": 0 } }`.
+ *
+ * @param program - The TypeSpec program.
+ * @param info - The polymorphic type.
+ * @param variant - The variant to render.
+ * @param visited - Accumulator for cycle detection. Include `info.type`, so a
+ *   variant that refers back to its polymorphic type does not recurse.
+ * @param visibilityFilter - Optional HTTP visibility to filter model properties.
+ * @returns A JSON-serializable value.
+ */
+export function jsonValueForPolymorphicVariant(
+  program: Program,
+  info: PolymorphicInfo,
+  variant: PolymorphicVariant,
+  visited: Set<Type>,
+  visibilityFilter?: Visibility,
+): unknown {
+  const value = jsonValueForType(
+    program,
+    variant.type,
+    new Set(visited),
+    visibilityFilter,
+  );
+  if (info.envelope === "object") {
+    return {
+      [info.propertyName]: variant.value,
+      [info.envelopePropertyName ?? "value"]: value,
+    };
+  }
+  const record = asRecord(value);
+  if (!record) return value;
+  // A declared discriminator is already in place (root discriminators first);
+  // an undeclared one (a `@discriminated` union variant) goes in front.
+  return info.propertyName in record
+    ? { ...record, [info.propertyName]: variant.value }
+    : { [info.propertyName]: variant.value, ...record };
 }
 
 /**

@@ -20,9 +20,15 @@ import {
   type HttpOperationResponse,
 } from "@typespec/http";
 import { getGlobalQueryOptions } from "./decorators.js";
+import {
+  describePolymorphism,
+  describeVariants,
+  describeWireShape,
+  polymorphicTypesIn,
+} from "./discriminators.js";
 import type { OperationExampleDoc } from "./operation-examples.js";
 import { operationExamples } from "./operation-examples.js";
-import { responsePayloadType } from "./payloads.js";
+import { operationPayloadTypes, responsePayloadType } from "./payloads.js";
 import {
   jsonValueForType,
   makeLinkedTypeRef,
@@ -90,6 +96,24 @@ export interface RequestBodyDoc {
    * is a multi-part or non-single kind where a synthetic example is impractical.
    */
   jsonExample?: string;
+}
+
+/**
+ * A polymorphic type that an operation sends or receives as a body (or as the
+ * items of an array or record body).
+ */
+export interface PolymorphicPayloadDoc {
+  /** Markdown type reference string for the polymorphic type. */
+  type: string;
+  /** Wire name of the discriminator property, e.g. `"kind"`. */
+  propertyName: string;
+  /**
+   * The discriminator values and the types they select, e.g.
+   * `` `"dog"` for [Dog](../resources/Dog.md), `"cat"` for [Cat](../resources/Cat.md) ``.
+   */
+  values: string;
+  /** One-sentence description of where the discriminator sits in the JSON. */
+  shape: string;
 }
 
 /**
@@ -162,6 +186,11 @@ export interface OperationPageModel {
    * See {@link ResponseDoc.headers} for the headers of a single status code.
    */
   responseHeaders: HttpParameterDoc[];
+  /**
+   * Polymorphic types among the request and response bodies (including array
+   * and record items), deduplicated, in the order they first appear.
+   */
+  polymorphicPayloads: PolymorphicPayloadDoc[];
   /** Text from `@returns` on the operation, if present. */
   returnsDoc?: string;
   /** Doc-comment content from the operation's `@errorsDoc` tag, if present. */
@@ -252,6 +281,11 @@ export function buildOperationPage(
     returnType: buildOperationReturnType(operation, httpOperation, makeRef),
     responses: buildResponseDocs(program, operation, httpOperation, makeRef),
     responseHeaders: buildResponseHeaderDocs(program, httpOperation, makeRef),
+    polymorphicPayloads: buildPolymorphicPayloadDocs(
+      program,
+      httpOperation,
+      makeRef,
+    ),
     returnsDoc: getReturnsDoc(program, operation),
     errorsDoc: getErrorsDoc(program, operation),
     externalDocs: formatExternalDocsLink(program, operation),
@@ -388,13 +422,19 @@ function buildRequestBodyDoc(
     httpOperation!.verb,
   );
   const typeName = makeRef(body.type);
+  const polymorphic =
+    body.bodyKind === "single"
+      ? polymorphicTypesIn(program, body.type)[0]
+      : undefined;
   return {
     type: typeName,
     contentTypes:
       body.contentTypes.length > 0
         ? [...body.contentTypes]
         : ["application/json"],
-    description: `Supply a request body of type ${typeName}.`,
+    description: polymorphic
+      ? `Supply a request body of type ${typeName}. ${describePolymorphism(polymorphic, makeRef)}`
+      : `Supply a request body of type ${typeName}.`,
     jsonExample:
       body.bodyKind === "single"
         ? JSON.stringify(
@@ -617,6 +657,41 @@ function responseHeaderDocs(
     }
   }
 
+  return docs;
+}
+
+/**
+ * Builds one {@link PolymorphicPayloadDoc} per polymorphic type the operation
+ * sends or receives as a body, so readers can see which discriminator values
+ * the operation accepts and returns.
+ *
+ * @param program - The TypeSpec program.
+ * @param httpOperation - The resolved HTTP operation, or `undefined`.
+ * @param makeRef - A type-reference function for Markdown links.
+ */
+function buildPolymorphicPayloadDocs(
+  program: Program,
+  httpOperation: HttpOperation | undefined,
+  makeRef: (type: Type) => string,
+): PolymorphicPayloadDoc[] {
+  if (!httpOperation) {
+    return [];
+  }
+
+  const seen = new Set<Type>();
+  const docs: PolymorphicPayloadDoc[] = [];
+  for (const payloadType of operationPayloadTypes(httpOperation)) {
+    for (const info of polymorphicTypesIn(program, payloadType)) {
+      if (seen.has(info.type)) continue;
+      seen.add(info.type);
+      docs.push({
+        type: makeRef(info.type),
+        propertyName: info.propertyName,
+        values: describeVariants(info, makeRef),
+        shape: describeWireShape(info),
+      });
+    }
+  }
   return docs;
 }
 

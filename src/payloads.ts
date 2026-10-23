@@ -522,7 +522,10 @@ export function selectDocumentedTypes<
  * @param program - The TypeSpec program.
  * @param model - The model to inspect.
  */
-function isInDiscriminatedHierarchy(program: Program, model: Model): boolean {
+export function isInDiscriminatedHierarchy(
+  program: Program,
+  model: Model,
+): boolean {
   for (
     let current: Model | undefined = model;
     current;

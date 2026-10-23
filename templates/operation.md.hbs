@@ -120,6 +120,14 @@ Don't supply a request body for this method.
 {{/each}}
 
 {{/if}}
+{{#if polymorphicPayloads.length}}
+## Polymorphic payloads
+
+{{#each polymorphicPayloads}}
+- {{type}}: `{{propertyName}}` selects {{values}}. {{shape}}
+{{/each}}
+
+{{/if}}
 ## Response headers
 
 {{#if responseHeaders.length}}

@@ -13,6 +13,13 @@ This project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - `@globalQueryOptions(...models)` decorator (in `MassiveScale.ApiDocs`) for query options that shared infrastructure handles, such as OData `$filter` and `$top`. Apply it to a namespace, interface, or operation; the nearest one wins. Each model property becomes a row in the operation's **Optional query parameters** table, after the parameters the operation declares, without changing the HTTP model, OpenAPI output, or generated code. Use `PickProperties` to give each operation its own subset. Custom `operation` templates receive the rows as `globalQueryOptions`.
 - The package now has a TypeSpec entry point (`lib/main.tsp`), so `import "@massivescale/tsp-api-docs";` works in `.tsp` files.
+- Discriminated types are documented as polymorphic payloads, for both `@discriminator` model hierarchies and `@discriminated` unions (with or without an envelope). See "Discriminated types" in the README.
+  - A polymorphic type's page names its discriminator, lists its **Derived types** (or, for a union, adds a discriminator value column to **Variants**), and shows one **JSON representation** per variant. A base model that leaves its discriminator undeclared gets a property row for it.
+  - A derived model's or variant's page shows its **Discriminator value** and links to the polymorphic type. A new **Polymorphic methods** table lists the operations that reach the type through that polymorphic type (e.g. `get(): Pet` on the `Dog` page).
+  - Operation pages get a **Polymorphic payloads** section, and the request body description names the discriminator values. When the request or primary response body is polymorphic, synthetic examples are generated once per variant (`Example 1: Dog`, `Example 2: Cat`, ...).
+  - The relation diagram links derived models to their base (`Dog |o..|| Pet : "extends (kind = dog)"`) and discriminated unions to their variants, and marks discriminator attributes.
+  - Custom templates get the new `discriminator`, `derivedTypes`, `discriminatorValues`, `polymorphicMethods`, and `variantRepresentations` fields on type pages, `discriminatorValue` on union variants, and `polymorphicPayloads` on operation pages.
+- The `versioned-api` example now includes a discriminated model hierarchy (`Notification`, with `PushNotification` added in v2.0) and two discriminated unions (`PaymentMethod` without an envelope, `OrderEvent` with one).
 
 ### Changed
 
@@ -32,6 +39,9 @@ This project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Response headers are now documented per status code on operation pages (name, type, required, description) and included in the example HTTP response (e.g. `ETag: string`). When an `@opExample` returns a response model, its `@body` value is used as the JSON body and its header values as header lines, instead of the whole model being printed as the body.
 - Query parameters use their wire name (`@query(#{ name: "$expand" })` documents `$expand`, not `expand`) in the query parameter table, the example request (`?$expand=string`), and the URI template, which now renders `{?$expand}` instead of `{?%24expand}`. Array query parameters render as `name=a,b`, or `name=a&name=b` with `explode: true`. Path parameters also use their wire name in examples.
 - Every IANA-registered HTTP status code now renders with its reason phrase (e.g. `409 Conflict`, `412 Precondition Failed`), not just the nine most common ones.
+- Synthetic JSON for a polymorphic type was invalid: a `@discriminator` base rendered without its discriminator (`{ "id": "string", "name": "string" }` for `Pet`), and a `@discriminated` union rendered as its first variant's bare properties, ignoring the discriminator and the envelope. A client copying either got an error. Request and response bodies, examples, type pages, and nested properties now render a real variant with its discriminator set and listed first (`{ "kind": "dog", ... }`, or `{ "kind": "created", "value": { ... } }` for an object envelope). A polymorphic array shows one item per variant.
+- A property typed as an enum member (`kind: PetKind.dog`) rendered as `"Demo.PetKind.dog"` in JSON and `Demo.PetKind.dog` in property tables. JSON now shows the member's value (`"dog"`), and tables show `[PetKind](PetKind.md).dog`. The relation diagram shows the enum's name instead of `unknown`.
+- **Changed output:** in the relation diagram, a model whose base is in the diagram now lists only its own properties and gets an `extends` line to its base, instead of repeating every inherited property.
 
 ---
 

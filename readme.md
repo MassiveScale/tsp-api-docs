@@ -24,6 +24,7 @@ Supports multiple output formats targeting Azure DevOps Wiki, GitHub, and DocFx.
 - Request body examples automatically omit read-only and immutable properties based on HTTP verb visibility.
 - Type names rendered exactly as defined — no CamelCase splitting in page titles.
 - Related-methods table on type pages lists only operations that directly address the type — return it (including through a response model such as `EntityResponse<Widget>`), accept it as a parameter or body (including through `MergePatchUpdate<Widget>`), or use a direct array/record/union of it. Operations that reference the type only through nested properties are excluded, except for one-level wrapper request models that are direct operation parameters (e.g. `CreateWidgetRequest { widget: Widget }`). Types decorated with `@error` are never treated as addressable entities and have no Methods section.
+- Discriminated types (`@discriminator` models and `@discriminated` unions) document their discriminator, derived types or variants, and a valid JSON payload for each variant. Operations that send or return them get one example per variant. See [Discriminated types](#discriminated-types).
 - DocFx `toc.yml` output is YAML-safe — service and page titles containing colons or other special characters are properly quoted.
 
 ## Requirements
@@ -160,7 +161,53 @@ Each operation page documents the HTTP request and every response:
 - **Request body** — the body type, content types, and a JSON example.
 - **Response** — what the caller receives on success (the 2xx body types, or `void`), followed by one row per status code with its body type and description. Status codes show their standard reason phrase (e.g. `409 Conflict`, `412 Precondition Failed`).
 - **Response headers** — one table per status code that returns headers (name, type, required, summary).
-- **Examples** — from `@opExample`, or generated from the HTTP metadata. Example requests use wire names (`?$expand=string`), and example responses include response headers (`ETag: string`). When an `@opExample` return value is a response model, its `@body` value becomes the JSON body and its header values become the header lines.
+- **Polymorphic payloads** — present when a body is a discriminated type. See [Discriminated types](#discriminated-types).
+- **Examples** — from `@opExample`, or generated from the HTTP metadata (one per variant for a polymorphic body). Example requests use wire names (`?$expand=string`), and example responses include response headers (`ETag: string`). When an `@opExample` return value is a response model, its `@body` value becomes the JSON body and its header values become the header lines.
+
+## Discriminated types
+
+A discriminated type is polymorphic: one property on the wire, the discriminator, says which concrete shape the payload has. TypeSpec has two forms, and both are documented the same way:
+
+```typespec
+// A base model and its derived models. Only the derived models must declare `kind`.
+@discriminator("kind")
+model Pet { name: string; }
+model Dog extends Pet { kind: "dog"; barkVolume: int32; }
+model Cat extends Pet { kind: "cat"; lives: int32; }
+
+// A union. With `envelope: "none"`, `type` sits beside the variant's properties.
+@discriminated(#{ discriminatorPropertyName: "type", envelope: "none" })
+union Shape { circle: Circle, square: Square }
+
+// With the default object envelope, the variant is wrapped:
+// { "kind": "created", "value": { ... } }
+@discriminated
+union Event { created: Created, deleted: Deleted }
+```
+
+Variants come from the compiler's `getDiscriminatedUnionFromInheritance` and `getDiscriminatedUnion`, the same helpers `@massivescale/tsp-aspnetcore-api` uses to generate `[JsonDerivedType]` attributes, so the documented values match what generated code serializes.
+
+**The polymorphic type's page** (`Pet`, `Shape`, `Event`):
+
+- `Discriminator:` names the discriminator property.
+- **Derived types** (models) or **Variants** (unions) is a table of each discriminator value and the type it selects, with a sentence on where the discriminator sits in the JSON.
+- A base model that leaves its discriminator undeclared still gets a property row for it, typed as the union of its derived types' values (`"dog" | "cat"`), because every payload carries it.
+- **JSON representation** has one block per variant, each with the discriminator set and listed first. Serializers such as `System.Text.Json` expect it first. A union with an object envelope shows the wrapped form.
+
+**A derived model's or variant's page** (`Dog`, `Circle`):
+
+- `Discriminator value:` gives the value that selects the type and links to the polymorphic type, e.g. `` `kind` = `"dog"` in [Pet] ``. A model nested in two discriminated hierarchies (`Shark extends Fish extends Pet`) has one line per level.
+- The discriminator property comes first in the property table and the JSON. When it has no `@doc`, its summary is generated (`Discriminator. Always "dog" for this type.`).
+- **Polymorphic methods** lists the operations that use a polymorphic type able to carry this type, but not the type itself, with the polymorphic type in the **Via** column. `get(): Pet` appears on the `Dog` page this way. Operations already in **Methods** are not repeated.
+
+**Operation pages:**
+
+- A synthetic JSON body for a polymorphic type is a real variant, with its discriminator set, instead of the bare base model. A client that sends the bare base gets an error.
+- When the request body or the primary response body is polymorphic, **Examples** has one example per variant (`Example 1: Dog`, `Example 2: Cat`, ...). When both are, each example sends and returns the same variant. A polymorphic array (`Pet[]`) is shown as one example whose array holds one item per variant.
+- **Polymorphic payloads** lists each polymorphic body type with its discriminator values. The request body description repeats this for the request.
+- `@opExample` examples are used as written.
+
+**Relation diagram:** a derived model shows only its own properties and links to its base with an `extends` line labelled with its discriminator value (`Dog |o..|| Pet : "extends (kind = dog)"`). Discriminator attributes are marked `"discriminator"`. A discriminated union links to each variant (`Circle |o..|| Shape : "type = circle"`). Plain inheritance also gets an `extends` line.
 
 ## Global query options
 
@@ -305,8 +352,9 @@ The diagram includes:
 
 - Models as entities with their properties and types
 - Enums as entities with their members
-- Unions as entities with their named variants
+- Unions as entities with their named variants; discriminated unions as entities with their discriminator, linked to each variant
 - Relationship lines between models that reference other service types
+- `extends` lines from derived models to their base, which show only their own properties
 
 ## API Name
 
@@ -418,7 +466,9 @@ All templates receive the standard view model for their page type. The following
 
 Refer to the built-in templates in `templates/` for the full variable list for each page type.
 
-The `operation` template also receives `pathParameters`, `optionalQueryParameters`, `globalQueryOptions`, `requestHeaders`, and `requestCookies` (each a list of `name`/`type`/`requiredLabel`/`summaryOrFallback`, keyed by wire name), `parameters` (every TypeSpec parameter by TypeSpec name), and `responses`, where each response has `statusCode`, `type`, `description`, and `headers`. `responseHeaders` lists every response header across all status codes.
+The `operation` template also receives `pathParameters`, `optionalQueryParameters`, `globalQueryOptions`, `requestHeaders`, and `requestCookies` (each a list of `name`/`type`/`requiredLabel`/`summaryOrFallback`, keyed by wire name), `parameters` (every TypeSpec parameter by TypeSpec name), and `responses`, where each response has `statusCode`, `type`, `description`, and `headers`. `responseHeaders` lists every response header across all status codes. `polymorphicPayloads` lists the polymorphic body types, each with `type`, `propertyName`, `values`, and `shape`.
+
+The `type` template also receives `discriminator` (`propertyName`, `envelope`, `envelopePropertyName`, `description`) for polymorphic types, `derivedTypes` (`value`, `type`, `summaryOrFallback`), `discriminatorValues` (`propertyName`, `value`, `polymorphicType`), `polymorphicMethods` (operation summaries with a `via` type), and `variantRepresentations` (`title`, `description`, `json`). Each entry in `variants` has a `discriminatorValue` for discriminated unions. Custom templates that ignore these fields keep working; `jsonRepresentation` for a polymorphic type is now its first variant.
 
 ## Contributing
 
