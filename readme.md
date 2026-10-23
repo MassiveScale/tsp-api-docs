@@ -21,7 +21,8 @@ Supports multiple output formats targeting Azure DevOps Wiki, GitHub, and DocFx.
 - Response headers documented per status code, and included in example responses.
 - Query, header, path, and cookie parameters documented by their HTTP wire names (e.g. `$expand`, `If-Match`).
 - `@globalQueryOptions` documents query options handled by shared infrastructure (e.g. OData `$filter`, `$top`) per operation, without adding them to the operation signature. See [Global query options](#global-query-options).
-- Request body examples automatically omit read-only and immutable properties based on HTTP verb visibility.
+- Request body examples automatically omit read-only and immutable properties based on HTTP verb visibility, and response examples omit write-only ones.
+- Example payloads are values a server accepts: properties use their `@encodedName` wire names, dates, durations and bytes follow their `@encode`, and strings and numbers honour `@format` and length/range constraints. See [Sample values](#sample-values).
 - Type names rendered exactly as defined — no CamelCase splitting in page titles.
 - Related-methods table on type pages lists only operations that directly address the type — return it (including through a response model such as `EntityResponse<Widget>`), accept it as a parameter or body (including through `MergePatchUpdate<Widget>`), or use a direct array/record/union of it. Operations that reference the type only through nested properties are excluded, except for one-level wrapper request models that are direct operation parameters (e.g. `CreateWidgetRequest { widget: Widget }`). Types decorated with `@error` are never treated as addressable entities and have no Methods section.
 - Discriminated types (`@discriminator` models and `@discriminated` unions) document their discriminator, derived types or variants, and a valid JSON payload for each variant. Operations that send or return them get one example per variant. See [Discriminated types](#discriminated-types).
@@ -150,6 +151,8 @@ Enums always get a page, whether or not an operation uses them. Templated models
 
 If a base model is metadata-only, a derived model's "Base type" points at the nearest base that does have a page (or is omitted).
 
+A plain record (`Record<string>`, or `model Tags is Record<string>`) is shown as `Record<string, T>` and gets no page. A model that declares properties and also accepts others (`model Bag { name: string; ...Record<string>; }` or `model Bag extends Record<string> { name: string; }`) is a model: it gets a page listing its properties, with an `Additional properties:` line naming the type of the others.
+
 When the service has **no** HTTP operations (a models-only library), every named model, enum, union, and scalar in the namespace gets a page, except metadata-only models and explicit-body response models.
 
 ## Operation pages
@@ -163,6 +166,27 @@ Each operation page documents the HTTP request and every response:
 - **Response headers** — one table per status code that returns headers (name, type, required, summary).
 - **Polymorphic payloads** — present when a body is a discriminated type. See [Discriminated types](#discriminated-types).
 - **Examples** — from `@opExample`, or generated from the HTTP metadata (one per variant for a polymorphic body). Example requests use wire names (`?$expand=string`), and example responses include response headers (`ETag: string`). When an `@opExample` return value is a response model, its `@body` value becomes the JSON body and its header values become the header lines.
+
+## Sample values
+
+JSON representations and generated examples use values a client can send as they are:
+
+| Type                      | Sample                                                                                                         |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `utcDateTime`             | `"2024-01-15T09:30:00Z"`; RFC 7231 (`"Mon, 15 Jan 2024 09:30:00 GMT"`) in a header                             |
+| `offsetDateTime`          | `"2024-01-15T10:30:00+01:00"`                                                                                  |
+| `plainDate` / `plainTime` | `"2024-01-15"` / `"09:30:00"`                                                                                  |
+| `duration`                | `"PT1H30M"`                                                                                                    |
+| `bytes`                   | `"aGVsbG8gd29ybGQ="` (base64)                                                                                  |
+| `url`                     | `"https://example.com"`                                                                                        |
+| `string` with `@format`   | a value for the format: `uuid`, `email`, `uri`, `url`, `date-time`, `date`, `time`, `hostname`, `ipv4`, `ipv6` |
+| `string`                  | `"string"`, padded or cut to `@minLength` / `@maxLength`                                                       |
+| numeric scalars           | `0`, moved inside `@minValue` / `@maxValue` and their exclusive forms                                          |
+
+- `@encode` changes the sample to match: `rfc7231` and `unixTimestamp` dates, `seconds` and `milliseconds` durations, `base64url` bytes, and `@encode(string)` on a boolean or number. It's read from the property first, then from the scalar's declaration chain.
+- A property with a declared default (`retries?: int32 = 3`) uses the default.
+- Properties are keyed by their JSON wire name, so `@encodedName("application/json", "display_label") label: string` appears as `display_label` in property tables and examples.
+- A model that accepts additional properties shows one as `"additionalProperty"`.
 
 ## Discriminated types
 

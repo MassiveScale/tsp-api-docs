@@ -6,6 +6,7 @@ import {
   serializeValueAsJson,
   walkPropertiesInherited,
   type Example,
+  type ModelProperty,
   type OpExample,
   type Operation,
   type Program,
@@ -17,7 +18,7 @@ import {
   resolveRequestVisibility,
   type HttpOperation,
   type HttpOperationResponse,
-  type Visibility,
+  Visibility,
 } from "@typespec/http";
 import {
   getPolymorphicVariants,
@@ -27,7 +28,9 @@ import {
 import {
   jsonValueForPolymorphicVariant,
   jsonValueForType,
+  scalarPlaceholder,
   typeReference,
+  type SampleLocation,
 } from "./type-ref.js";
 import {
   applyRoutePrefix,
@@ -396,7 +399,13 @@ function buildHttpRequestExample(
 
   lines.push(...headerLines);
 
-  if (body) {
+  // An explicit `@header contentType` parameter is already among the headers.
+  const declaresContentType = httpOperation.parameters.parameters.some(
+    (parameter) =>
+      parameter.type === "header" &&
+      parameter.name.toLowerCase() === "content-type",
+  );
+  if (body && !declaresContentType) {
     lines.push(`Content-Type: ${body.contentTypes[0] ?? "application/json"}`);
   }
 
@@ -460,7 +469,7 @@ function buildHttpResponseExample(
   for (const [name, property] of Object.entries(content?.headers ?? {})) {
     const value =
       example?.headers[property.name] ??
-      sampleValueForType(program, property.type);
+      sampleValueForType(program, property.type, property, "header");
     lines.push(`${name}: ${formatHeaderValue(value)}`);
   }
 
@@ -692,6 +701,8 @@ function resolveHttpParameterValues(
     resolvedValues[parameter.param.name] = sampleValueForType(
       program,
       parameter.param.type,
+      parameter.param,
+      parameter.type === "header" ? "header" : "query",
     );
   }
 
@@ -699,15 +710,27 @@ function resolveHttpParameterValues(
 }
 
 /**
- * Generates a representative sample value for a TypeSpec type.
+ * Generates a representative sample value for a parameter or header.
  *
- * Delegates to {@link jsonValueForType} with an empty visited set.
+ * A scalar goes through {@link scalarPlaceholder}, so the parameter's own
+ * `@encode` and constraints apply and a `utcDateTime` header uses RFC 7231.
+ * Anything else delegates to {@link jsonValueForType}.
  *
  * @param program - The TypeSpec program.
  * @param type - The type to sample.
+ * @param property - The parameter or header property, if any.
+ * @param location - Where the value travels.
  */
-function sampleValueForType(program: Program, type: Type): unknown {
-  return jsonValueForType(program, type, new Set<Type>());
+function sampleValueForType(
+  program: Program,
+  type: Type,
+  property?: ModelProperty,
+  location: SampleLocation = "body",
+): unknown {
+  if (type.kind === "Scalar") {
+    return scalarPlaceholder(program, type, property, location);
+  }
+  return jsonValueForType(program, type, new Set<Type>(), undefined, property);
 }
 
 /**
@@ -768,8 +791,13 @@ function inferResponseBodyValue(
   }
 
   return bodyVariant
-    ? selectedVariantValue(program, bodyVariant)
-    : jsonValueForType(program, responseContent.body.type, new Set<Type>());
+    ? selectedVariantValue(program, bodyVariant, Visibility.Read)
+    : jsonValueForType(
+        program,
+        responseContent.body.type,
+        new Set<Type>(),
+        Visibility.Read,
+      );
 }
 
 /**

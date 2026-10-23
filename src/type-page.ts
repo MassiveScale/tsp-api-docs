@@ -30,6 +30,7 @@ import type {
 } from "./service-entry.js";
 import {
   jsonRepresentationForType,
+  jsonPropertyName,
   jsonValueForPolymorphicVariant,
   makeLinkedTypeRef,
   modelBaseType,
@@ -42,7 +43,11 @@ import {
 } from "./utils.js";
 import { propertyDocs } from "./operation-page.js";
 import type { ParameterDoc } from "./operation-page.js";
-import { payloadBaseModel, payloadProperties } from "./payloads.js";
+import {
+  additionalPropertiesType,
+  payloadBaseModel,
+  payloadProperties,
+} from "./payloads.js";
 
 /**
  * Documentation for a single variant of a TypeSpec `union`.
@@ -192,6 +197,11 @@ export interface TypePageModel {
   /** Derived types of a `@discriminator` model; empty for all other types. */
   derivedTypes: DerivedTypeDoc[];
   /**
+   * Markdown type reference string for the type of the additional properties
+   * a model accepts beside its declared ones (`...Record<string>`), if any.
+   */
+  additionalProperties?: string;
+  /**
    * Polymorphic types that select this type by a discriminator value, nearest
    * first (e.g. `kind` is `"dog"` in `Pet`).
    */
@@ -267,6 +277,7 @@ export function buildTypePage(
 
   if (type.kind === "Model") {
     const baseModel = payloadBaseModel(program, type);
+    const additionalProperties = additionalPropertiesType(program, type);
     return {
       title: type.name,
       summary,
@@ -277,6 +288,9 @@ export function buildTypePage(
       kind: type.kind,
       breadcrumbs: breadcrumbsForType(program, type),
       baseType: baseModel ? makeRef(baseModel) : modelBaseType(program, type),
+      additionalProperties: additionalProperties
+        ? makeRef(additionalProperties)
+        : undefined,
       properties: modelPropertyDocs(
         program,
         type,
@@ -446,11 +460,18 @@ function modelPropertyDocs(
     }
   }
 
+  // Readers write the JSON, so rows use each property's wire name.
+  const wireNames = new Map(
+    properties.map((property) => [
+      property.name,
+      jsonPropertyName(program, property),
+    ]),
+  );
   return withNamesFirst(
     docs,
     (doc) => doc.name,
     discriminatorPropertyNames(program, model),
-  );
+  ).map((doc) => ({ ...doc, name: wireNames.get(doc.name) ?? doc.name }));
 }
 
 /**

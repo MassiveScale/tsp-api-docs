@@ -1,9 +1,4 @@
-import {
-  isArrayModelType,
-  isRecordModelType,
-  type Program,
-  type Type,
-} from "@typespec/compiler";
+import { isArrayModelType, type Program, type Type } from "@typespec/compiler";
 import {
   discriminatorPropertyNames,
   getPolymorphicInfo,
@@ -13,11 +8,12 @@ import {
 import type { OutputFormat } from "./lib.js";
 import {
   isPayloadProperty,
+  isPlainRecordModel,
   payloadBaseModel,
   payloadProperties,
 } from "./payloads.js";
 import type { ServiceEntry } from "./service-entry.js";
-import { arrayElementType } from "./type-ref.js";
+import { arrayElementType, jsonPropertyName } from "./type-ref.js";
 
 /**
  * Describes a resolved ER-diagram relationship target — the type at the other
@@ -65,7 +61,7 @@ export function buildRelationDiagram(
     if (
       type.kind === "Model" &&
       !isArrayModelType(program, type) &&
-      !isRecordModelType(program, type)
+      !isPlainRecordModel(program, type)
     ) {
       // A derived model shows only its own properties and an "extends" line;
       // the inherited ones are on the base entity.
@@ -96,7 +92,9 @@ export function buildRelationDiagram(
         const comment = discriminators.includes(prop.name)
           ? ` "discriminator"`
           : "";
-        attrs.push(`    ${attrType} ${sanitizeErName(prop.name)}${comment}`);
+        attrs.push(
+          `    ${attrType} ${sanitizeErName(jsonPropertyName(program, prop))}${comment}`,
+        );
 
         const relTarget = resolveErRelationTarget(
           program,
@@ -255,7 +253,7 @@ function erAttrType(program: Program, type: Type): string {
         const elemName = valueType ? erAttrType(program, valueType) : "unknown";
         return `${elemName}_array`;
       }
-      if (isRecordModelType(program, type)) return "map";
+      if (isPlainRecordModel(program, type)) return "map";
       if (type.name) return sanitizeErName(type.name);
       return "object";
     case "Enum":

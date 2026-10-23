@@ -28,6 +28,10 @@ Path: {{join breadcrumbs " > "}}
 Base type: {{baseType}}
 
 {{/if}}
+{{#if additionalProperties}}
+Additional properties: {{additionalProperties}}. Besides the properties below, the object can hold any other property of this type.
+
+{{/if}}
 {{#if discriminator}}
 Discriminator: `{{discriminator.propertyName}}`
 

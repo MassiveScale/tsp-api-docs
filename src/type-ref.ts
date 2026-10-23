@@ -1,9 +1,17 @@
 import {
   getEncode,
+  getFormat,
+  getMaxLength,
+  getMaxValue,
+  getMaxValueExclusive,
+  getMinLength,
+  getMinValue,
+  getMinValueExclusive,
   getTypeName,
   isArrayModelType,
   isGlobalNamespace,
-  isRecordModelType,
+  resolveEncodedName,
+  serializeValueAsJson,
   type EncodeData,
   type Enum,
   type Model,
@@ -22,8 +30,26 @@ import {
   type PolymorphicInfo,
   type PolymorphicVariant,
 } from "./discriminators.js";
-import { payloadProperties } from "./payloads.js";
+import {
+  additionalPropertiesType,
+  isPlainRecordModel,
+  payloadProperties,
+} from "./payloads.js";
 import { asRecord, namespaceName } from "./utils.js";
+
+/**
+ * Returns the name a property has in a JSON body: its `@encodedName` for
+ * `application/json` when one is set, otherwise its TypeSpec name.
+ *
+ * @param program - The TypeSpec program.
+ * @param property - The model property.
+ */
+export function jsonPropertyName(
+  program: Program,
+  property: ModelProperty,
+): string {
+  return resolveEncodedName(program, property, "application/json");
+}
 
 /**
  * Returns the element type of an array model.
@@ -103,7 +129,7 @@ export function typeReference(program: Program, type: Type): string {
         const valueType = arrayElementType(type);
         return `${valueType ? typeReference(program, valueType) : "unknown"}[]`;
       }
-      if (isRecordModelType(program, type)) {
+      if (isPlainRecordModel(program, type)) {
         const valueType = type.indexer?.value;
         return `Record<string, ${valueType ? typeReference(program, valueType) : "unknown"}>`;
       }
@@ -171,7 +197,7 @@ export function makeLinkedTypeRef(
           const valueType = arrayElementType(type);
           return `${valueType ? linkedRef(valueType) : "unknown"}[]`;
         }
-        if (isRecordModelType(program, type)) {
+        if (isPlainRecordModel(program, type)) {
           const valueType = type.indexer?.value;
           return `Record<string, ${valueType ? linkedRef(valueType) : "unknown"}>`;
         }
@@ -223,7 +249,7 @@ export function modelBaseType(
     return "Array";
   }
 
-  if (isRecordModelType(program, model)) {
+  if (isPlainRecordModel(program, model)) {
     return "Record";
   }
 
@@ -291,12 +317,23 @@ export function jsonRepresentationForType(
         ) {
           continue;
         }
-        jsonObject[property.name] = jsonValueForType(
+        jsonObject[jsonPropertyName(program, property)] =
+          defaultValueJson(program, property) ??
+          jsonValueForType(
+            program,
+            property.type,
+            visited,
+            visibilityFilter,
+            property,
+          );
+      }
+      const additional = additionalPropertiesType(program, type);
+      if (additional) {
+        jsonObject.additionalProperty = jsonValueForType(
           program,
-          property.type,
+          additional,
           visited,
           visibilityFilter,
-          property,
         );
       }
       return jsonObject;
@@ -405,7 +442,7 @@ export function jsonValueForType(
             : "unknown",
         ];
       }
-      if (isRecordModelType(program, type)) {
+      if (isPlainRecordModel(program, type)) {
         if (visited.has(type)) return {};
         const valueType = type.indexer?.value;
         return {
@@ -574,32 +611,156 @@ function encodesAsString(encode: EncodeData | undefined): boolean {
 }
 
 /**
- * Returns a representative primitive placeholder value for a TypeSpec scalar.
+ * Returns a property's declared default (`name: string = "Unnamed"`) as JSON,
+ * or `undefined` when it has none or the default cannot be serialized. A
+ * declared default is always a value the server accepts, so it makes a better
+ * sample than a generic placeholder.
  *
- * Walks the scalar's inheritance chain looking for a known built-in base name:
- * - `"string"` or any derived scalar → `"string"`
- * - `"boolean"` → `true`, or the string `"true"` when `@encode(string)`
- *   applies (checked on `property` first, then on `type` itself)
- * - Numeric families (`int*`, `uint*`, `float*`, `numeric`) → `0`
+ * @param program - The TypeSpec program.
+ * @param property - The model property.
+ */
+function defaultValueJson(program: Program, property: ModelProperty): unknown {
+  if (!property.defaultValue) return undefined;
+  try {
+    return (
+      serializeValueAsJson(program, property.defaultValue, property.type) ??
+      undefined
+    );
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Where a sample value travels. It decides the default wire encoding of
+ * `utcDateTime` and `offsetDateTime`: RFC 7231 in a header, RFC 3339 elsewhere,
+ * matching `@typespec/http`.
+ */
+export type SampleLocation = "body" | "query" | "header";
+
+/** The instant every date and time sample shows: 2024-01-15 09:30:00 UTC. */
+const SAMPLE_INSTANT = {
+  rfc3339: "2024-01-15T09:30:00Z",
+  rfc3339Offset: "2024-01-15T10:30:00+01:00",
+  rfc7231: "Mon, 15 Jan 2024 09:30:00 GMT",
+  unixTimestamp: 1705311000,
+};
+
+/** Sample values for string `@format`s that a placeholder `"string"` would fail. */
+const SAMPLE_FORMATS: Record<string, string> = {
+  uuid: "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  email: "user@example.com",
+  uri: "https://example.com",
+  url: "https://example.com",
+  "date-time": SAMPLE_INSTANT.rfc3339,
+  date: "2024-01-15",
+  time: "09:30:00",
+  hostname: "example.com",
+  ipv4: "192.0.2.1",
+  ipv6: "2001:db8::1",
+};
+
+/**
+ * Returns a representative value for a TypeSpec scalar, as it appears on the
+ * wire, so examples are payloads a server would accept.
  *
- * Falls back to the scalar's own name when no built-in is found.
+ * Walks the scalar's inheritance chain to the nearest built-in scalar:
+ * - `utcDateTime` / `offsetDateTime` → RFC 3339, or RFC 7231 in a header, or
+ *   per `@encode` (`rfc3339`, `rfc7231`, `unixTimestamp`)
+ * - `plainDate` → `"2024-01-15"`, `plainTime` → `"09:30:00"`
+ * - `duration` → ISO 8601 (`"PT1H30M"`), or per `@encode` (`seconds`,
+ *   `milliseconds`)
+ * - `bytes` → base64 (or base64url per `@encode`)
+ * - `url` → `"https://example.com"`
+ * - `string` → a value for its `@format` (`uuid`, `email`, ...), or
+ *   `"string"` adjusted to `@minLength` / `@maxLength`
+ * - `boolean` → `true`
+ * - numeric scalars → `0`, moved inside `@minValue` / `@maxValue` (and their
+ *   exclusive forms)
+ *
+ * `@encode` and constraints are read from `property` first, then from each
+ * scalar in the chain. A value whose encoding targets `string` (e.g.
+ * `@encode(string)` on a `boolean`) is rendered as a string. Falls back to the
+ * scalar's own name when no built-in is found.
  *
  * @param program - The TypeSpec program.
  * @param type - The scalar type to generate a placeholder for.
- * @param property - The model property this scalar occurrence came from, if any.
+ * @param property - The model property (or parameter) this scalar occurrence
+ *   came from, if any.
+ * @param location - Where the value travels; see {@link SampleLocation}.
  */
 export function scalarPlaceholder(
   program: Program,
   type: Scalar,
   property?: ModelProperty,
+  location: SampleLocation = "body",
 ): unknown {
-  let current: Scalar | undefined = type;
-  while (current) {
-    if (current.name === "string") return "string";
-    if (current.name === "boolean") {
-      const encode =
-        resolveBooleanEncode(program, property) ?? getEncode(program, type);
-      return encodesAsString(encode) ? "true" : true;
+  const encode = resolveEncode(program, type, property);
+  const value = builtInPlaceholder(program, type, property, encode, location);
+  return encodesAsString(encode) && typeof value !== "string"
+    ? String(value)
+    : value;
+}
+
+/**
+ * Returns the placeholder for the nearest built-in scalar in `type`'s chain,
+ * before any encode-as-string conversion. See {@link scalarPlaceholder}.
+ *
+ * @param program - The TypeSpec program.
+ * @param type - The scalar type.
+ * @param property - The property the scalar came from, if any.
+ * @param encode - The resolved `@encode` data, if any.
+ * @param location - Where the value travels.
+ */
+function builtInPlaceholder(
+  program: Program,
+  type: Scalar,
+  property: ModelProperty | undefined,
+  encode: EncodeData | undefined,
+  location: SampleLocation,
+): unknown {
+  const defaultDateTimeEncoding = location === "header" ? "rfc7231" : "rfc3339";
+  for (
+    let current: Scalar | undefined = type;
+    current;
+    current = current.baseScalar
+  ) {
+    switch (current.name) {
+      case "url":
+        return "https://example.com";
+      case "utcDateTime":
+      case "offsetDateTime":
+        switch (encode?.encoding ?? defaultDateTimeEncoding) {
+          case "rfc7231":
+            return SAMPLE_INSTANT.rfc7231;
+          case "unixTimestamp":
+            return SAMPLE_INSTANT.unixTimestamp;
+          default:
+            return current.name === "offsetDateTime"
+              ? SAMPLE_INSTANT.rfc3339Offset
+              : SAMPLE_INSTANT.rfc3339;
+        }
+      case "plainDate":
+        return "2024-01-15";
+      case "plainTime":
+        return "09:30:00";
+      case "duration":
+        switch (encode?.encoding) {
+          case "seconds":
+            return 5400;
+          case "milliseconds":
+            return 5400000;
+          default:
+            return "PT1H30M";
+        }
+      case "bytes":
+        return encode?.encoding === "base64url"
+          ? "aGVsbG8gd29ybGQ"
+          : "aGVsbG8gd29ybGQ=";
+      case "string":
+        return stringPlaceholder(program, type, property);
+      case "boolean":
+        return true;
     }
     if (
       current.name.startsWith("int") ||
@@ -607,9 +768,124 @@ export function scalarPlaceholder(
       current.name.startsWith("float") ||
       current.name.startsWith("numeric")
     ) {
-      return 0;
+      return numericPlaceholder(program, type, property);
     }
-    current = current.baseScalar;
   }
   return type.name;
+}
+
+/**
+ * Returns a string sample honouring `@format`, `@minLength` and `@maxLength`.
+ *
+ * @param program - The TypeSpec program.
+ * @param type - The string scalar (or a scalar derived from it).
+ * @param property - The property the scalar came from, if any.
+ */
+function stringPlaceholder(
+  program: Program,
+  type: Scalar,
+  property: ModelProperty | undefined,
+): string {
+  const format = constraint(program, type, property, getFormat);
+  if (format && SAMPLE_FORMATS[format.toLowerCase()]) {
+    return SAMPLE_FORMATS[format.toLowerCase()];
+  }
+  const minLength = constraint(program, type, property, getMinLength);
+  const maxLength = constraint(program, type, property, getMaxLength);
+  let value = "string";
+  if (minLength !== undefined && value.length < minLength) {
+    value = value.padEnd(minLength, "s");
+  }
+  if (maxLength !== undefined && value.length > maxLength) {
+    value = value.slice(0, maxLength);
+  }
+  return value;
+}
+
+/**
+ * Returns `0`, moved inside the `@minValue` / `@maxValue` (and exclusive)
+ * bounds that apply.
+ *
+ * @param program - The TypeSpec program.
+ * @param type - The numeric scalar (or a scalar derived from it).
+ * @param property - The property the scalar came from, if any.
+ */
+function numericPlaceholder(
+  program: Program,
+  type: Scalar,
+  property: ModelProperty | undefined,
+): number {
+  const min = constraint(program, type, property, getMinValue);
+  const minExclusive = constraint(
+    program,
+    type,
+    property,
+    getMinValueExclusive,
+  );
+  const max = constraint(program, type, property, getMaxValue);
+  const maxExclusive = constraint(
+    program,
+    type,
+    property,
+    getMaxValueExclusive,
+  );
+
+  let value = 0;
+  if (min !== undefined && value < min) value = min;
+  if (minExclusive !== undefined && value <= minExclusive) {
+    value = minExclusive + 1;
+  }
+  if (max !== undefined && value > max) value = max;
+  if (maxExclusive !== undefined && value >= maxExclusive) {
+    value = maxExclusive - 1;
+  }
+  return value;
+}
+
+/**
+ * Reads a constraint from `property` first, then from each scalar in `type`'s
+ * chain, returning the first one set.
+ *
+ * @param program - The TypeSpec program.
+ * @param type - The scalar type.
+ * @param property - The property the scalar came from, if any.
+ * @param read - The compiler accessor for the constraint (e.g. `getMinValue`).
+ */
+function constraint<T>(
+  program: Program,
+  type: Scalar,
+  property: ModelProperty | undefined,
+  read: (program: Program, target: Type) => T | undefined,
+): T | undefined {
+  const own = property ? read(program, property) : undefined;
+  if (own !== undefined) return own;
+  for (
+    let current: Scalar | undefined = type;
+    current;
+    current = current.baseScalar
+  ) {
+    const value = read(program, current);
+    if (value !== undefined) return value;
+  }
+  return undefined;
+}
+
+/**
+ * Resolves the `@encode` data that applies to a scalar occurrence: the
+ * property's own `@encode` first, then the nearest one in the scalar chain.
+ *
+ * @param program - The TypeSpec program.
+ * @param type - The scalar type.
+ * @param property - The property the scalar came from, if any.
+ */
+function resolveEncode(
+  program: Program,
+  type: Scalar,
+  property: ModelProperty | undefined,
+): EncodeData | undefined {
+  return constraint(program, type, property, (p, target) =>
+    target.kind === "Scalar" || target.kind === "ModelProperty"
+      ? getEncode(p, target)
+      : undefined,
+  );
 }

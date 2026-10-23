@@ -3,7 +3,6 @@ import {
   getSummary,
   isArrayModelType,
   isErrorModel,
-  isRecordModelType,
   listServices,
   walkPropertiesInherited,
   type Enum,
@@ -25,7 +24,9 @@ import {
 } from "./collect.js";
 import { unionMemberships } from "./discriminators.js";
 import {
+  isCollectionModel,
   isInDiscriminatedHierarchy,
+  isPlainRecordModel,
   isSameDeclaration,
   operationPayloadTypes,
   selectDocumentedTypes,
@@ -716,7 +717,7 @@ export function operationUsesType(
     if (
       paramType.kind === "Model" &&
       !isArrayModelType(program, paramType) &&
-      !isRecordModelType(program, paramType)
+      !isPlainRecordModel(program, paramType)
     ) {
       for (const nested of walkPropertiesInherited(paramType)) {
         if (typeDirectlyReferencesTarget(program, nested.type, target)) {
@@ -750,7 +751,7 @@ function typeDirectlyReferencesTarget(
 
   switch (type.kind) {
     case "Model": {
-      if (isArrayModelType(program, type) || isRecordModelType(program, type)) {
+      if (isCollectionModel(program, type)) {
         const elementType = arrayElementType(type);
         return elementType === target;
       }

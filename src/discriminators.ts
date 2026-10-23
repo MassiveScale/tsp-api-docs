@@ -16,14 +16,16 @@ import {
   getDiscriminatedUnion,
   getDiscriminatedUnionFromInheritance,
   getDiscriminator,
-  isArrayModelType,
-  isRecordModelType,
   type Model,
   type Program,
   type Type,
   type Union,
 } from "@typespec/compiler";
-import { isHttpEnvelopeModel, isSameDeclaration } from "./payloads.js";
+import {
+  isCollectionModel,
+  isHttpEnvelopeModel,
+  isSameDeclaration,
+} from "./payloads.js";
 
 /** One concrete shape a polymorphic type can take on the wire. */
 export interface PolymorphicVariant {
@@ -151,7 +153,7 @@ export function polymorphicTypesIn(
 
   if (
     type.kind === "Model" &&
-    (isArrayModelType(program, type) || isRecordModelType(program, type)) &&
+    isCollectionModel(program, type) &&
     type.indexer
   ) {
     return polymorphicTypesIn(program, type.indexer.value, visited);
