@@ -60,6 +60,66 @@ import {
 export type DocumentableType = Model | Enum | Union | Scalar;
 
 /**
+ * Returns `true` for a record with no declared properties: `Record<T>`, or a
+ * named `model Tags is Record<string>`. Such a model is a plain map, shown as
+ * `Record<string, T>`.
+ *
+ * A model that declares properties *and* accepts others
+ * (`model Bag { name: string; ...Record<string>; }`) also has a string indexer,
+ * so `isRecordModelType` reports it as a record. It is not plain: it is
+ * documented as a model, with its additional properties noted (see
+ * {@link additionalPropertiesType}).
+ *
+ * @param program - The TypeSpec program.
+ * @param model - The model to inspect.
+ */
+export function isPlainRecordModel(program: Program, model: Model): boolean {
+  return (
+    isRecordModelType(program, model) &&
+    walkPropertiesInherited(model).next().done === true
+  );
+}
+
+/**
+ * Returns `true` for an array or a plain record (see {@link isPlainRecordModel}):
+ * a model that is documented through its element type rather than as itself.
+ *
+ * @param program - The TypeSpec program.
+ * @param model - The model to inspect.
+ */
+export function isCollectionModel(program: Program, model: Model): boolean {
+  return isArrayModelType(program, model) || isPlainRecordModel(program, model);
+}
+
+/**
+ * Returns the type of the additional properties a model with declared
+ * properties accepts (`string` for `model Bag { name: string; ...Record<string>; }`
+ * or `model Bag extends Record<string> { name: string; }`), or `undefined` when
+ * it accepts none or is a plain record.
+ *
+ * @param program - The TypeSpec program.
+ * @param model - The model to inspect.
+ */
+export function additionalPropertiesType(
+  program: Program,
+  model: Model,
+): Type | undefined {
+  if (isArrayModelType(program, model) || isPlainRecordModel(program, model)) {
+    return undefined;
+  }
+  for (
+    let current: Model | undefined = model;
+    current;
+    current = current.baseModel
+  ) {
+    if (current.indexer && current.indexer.key.name === "string") {
+      return current.indexer.value;
+    }
+  }
+  return undefined;
+}
+
+/**
  * Returns `true` when every property of `model` (including inherited ones) is
  * HTTP metadata. A model with no properties is not metadata-only.
  *
@@ -145,7 +205,7 @@ function referencesEnvelopeModel(
 
   switch (type.kind) {
     case "Model":
-      if (isArrayModelType(program, type) || isRecordModelType(program, type)) {
+      if (isCollectionModel(program, type)) {
         return type.indexer
           ? referencesEnvelopeModel(program, type.indexer.value, visited)
           : false;
@@ -431,7 +491,7 @@ export function selectDocumentedTypes<
   };
 
   const visitModel = (model: Model): void => {
-    if (isArrayModelType(program, model) || isRecordModelType(program, model)) {
+    if (isCollectionModel(program, model)) {
       if (model.indexer) visitType(model.indexer.value);
       return;
     }
@@ -452,6 +512,8 @@ export function selectDocumentedTypes<
     for (const property of payloadProperties(program, model)) {
       visitType(property.type);
     }
+    const additional = additionalPropertiesType(program, model);
+    if (additional) visitType(additional);
     const base = payloadBaseModel(program, model);
     if (base) visitType(base);
     if (isInDiscriminatedHierarchy(program, model)) {
@@ -522,7 +584,10 @@ export function selectDocumentedTypes<
  * @param program - The TypeSpec program.
  * @param model - The model to inspect.
  */
-function isInDiscriminatedHierarchy(program: Program, model: Model): boolean {
+export function isInDiscriminatedHierarchy(
+  program: Program,
+  model: Model,
+): boolean {
   for (
     let current: Model | undefined = model;
     current;

@@ -29,7 +29,7 @@ Path: {{join breadcrumbs " > "}}
 | Name | Type | Required | Summary |
 | - | - | - | - |
 {{#each pathParameters}}
-| {{mdCell name}} | {{mdCell type}} | {{mdCell requiredLabel}} | {{mdCell summaryOrFallback}} |
+| {{mdCell name}} | {{mdCell type}} | {{mdCell requiredLabel}} | {{mdCell description}} |
 {{/each}}
 
 {{/if}}
@@ -40,7 +40,7 @@ Path: {{join breadcrumbs " > "}}
 | Name | Type | Required | Summary |
 | - | - | - | - |
 {{#each parameters}}
-| {{mdCell name}} | {{mdCell type}} | {{mdCell requiredLabel}} | {{mdCell summaryOrFallback}} |
+| {{mdCell name}} | {{mdCell type}} | {{mdCell requiredLabel}} | {{mdCell description}} |
 {{/each}}
 {{else}}
 This method does not declare request parameters.
@@ -59,10 +59,10 @@ This method does not declare request parameters.
 This method does not support query parameters.
 {{/if}}
 {{#each optionalQueryParameters}}
-| {{mdCell name}} | {{mdCell type}} | {{mdCell requiredLabel}} | {{mdCell summaryOrFallback}} |
+| {{mdCell name}} | {{mdCell type}} | {{mdCell requiredLabel}} | {{mdCell description}} |
 {{/each}}
 {{#each globalQueryOptions}}
-| {{mdCell name}} | {{mdCell type}} | {{mdCell requiredLabel}} | {{mdCell summaryOrFallback}} |
+| {{mdCell name}} | {{mdCell type}} | {{mdCell requiredLabel}} | {{mdCell description}} |
 {{/each}}
 
 ## Request headers
@@ -71,7 +71,7 @@ This method does not support query parameters.
 | Name | Type | Required | Summary |
 | - | - | - | - |
 {{#each requestHeaders}}
-| {{mdCell name}} | {{mdCell type}} | {{mdCell requiredLabel}} | {{mdCell summaryOrFallback}} |
+| {{mdCell name}} | {{mdCell type}} | {{mdCell requiredLabel}} | {{mdCell description}} |
 {{/each}}
 {{else}}
 No custom request headers are required for this method.
@@ -83,7 +83,7 @@ No custom request headers are required for this method.
 | Name | Type | Required | Summary |
 | - | - | - | - |
 {{#each requestCookies}}
-| {{mdCell name}} | {{mdCell type}} | {{mdCell requiredLabel}} | {{mdCell summaryOrFallback}} |
+| {{mdCell name}} | {{mdCell type}} | {{mdCell requiredLabel}} | {{mdCell description}} |
 {{/each}}
 
 {{/if}}
@@ -120,6 +120,14 @@ Don't supply a request body for this method.
 {{/each}}
 
 {{/if}}
+{{#if polymorphicPayloads.length}}
+## Polymorphic payloads
+
+{{#each polymorphicPayloads}}
+- {{type}}: `{{propertyName}}` selects {{values}}. {{shape}}
+{{/each}}
+
+{{/if}}
 ## Response headers
 
 {{#if responseHeaders.length}}
@@ -130,7 +138,7 @@ Don't supply a request body for this method.
 | Name | Type | Required | Summary |
 | - | - | - | - |
 {{#each headers}}
-| {{mdCell name}} | {{mdCell type}} | {{mdCell requiredLabel}} | {{mdCell summaryOrFallback}} |
+| {{mdCell name}} | {{mdCell type}} | {{mdCell requiredLabel}} | {{mdCell description}} |
 {{/each}}
 
 {{/if}}

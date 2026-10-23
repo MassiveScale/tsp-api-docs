@@ -102,6 +102,42 @@ interface Customers {
 
     @doc("Deletes a customer by their unique identifier.")
     @removed(Versions.v2_0)
-    @delete    
+    @delete
     delete(@path id: string): void | ErrorResponse;
+}
+
+@route("customers/{customerId}/notifications")
+@tag("Notifications")
+@doc("Controller for the notifications sent to a customer.")
+interface Notifications {
+    @doc("Retrieves every notification sent to the customer.")
+    @get
+    list(@path customerId: string): Notification[];
+
+    @doc("Retrieves a specific notification.")
+    @get
+    read(@path customerId: string, @path id: string): Notification | ErrorResponse;
+
+    @doc("Sends a notification to the customer over the channel named by `channel`.")
+    @post
+    send(@path customerId: string, @body body: Notification):
+        | {
+              @statusCode statusCode: 201;
+              @body body: Notification;
+          }
+        | ErrorResponse;
+}
+
+@route("orders")
+@tag("Orders")
+@doc("Controller for Order entities.")
+interface Orders {
+    @doc("Retrieves a specific order by its unique identifier.")
+    @get
+    read(@path id: string): Order | ErrorResponse;
+
+    @doc("Retrieves the history of events for an order.")
+    @get
+    @route("{id}/events")
+    events(@path id: string): OrderEvent[] | ErrorResponse;
 }

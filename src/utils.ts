@@ -145,15 +145,18 @@ export function splitIdentifierWords(value: string): string[] {
 }
 
 /**
- * Escapes characters that would break a Markdown table cell:
- * backslashes, pipe characters, and newlines.
+ * Escapes characters that would break a Markdown table cell: pipe characters
+ * and newlines. A backslash is doubled only when a pipe follows it, so it
+ * cannot swallow the pipe's escape. Other backslashes are left alone, because
+ * inside a code span (e.g. a `@pattern` such as `` `^\d+$` ``) a doubled
+ * backslash would render as two.
  *
  * @param value - The raw cell text.
  * @returns A single-line string safe to embed inside a `|`-delimited table.
  */
 export function escapeMarkdownCell(value: string): string {
   return value
-    .replace(/\\/gu, "\\\\")
+    .replace(/\\(?=\|)/gu, "\\\\")
     .replace(/\|/gu, "\\|")
     .replace(/[\r\n]+/gu, " ")
     .trim();

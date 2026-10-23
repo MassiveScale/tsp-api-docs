@@ -6,6 +6,7 @@ import {
   serializeValueAsJson,
   walkPropertiesInherited,
   type Example,
+  type ModelProperty,
   type OpExample,
   type Operation,
   type Program,
@@ -17,9 +18,20 @@ import {
   resolveRequestVisibility,
   type HttpOperation,
   type HttpOperationResponse,
-  type Visibility,
+  Visibility,
 } from "@typespec/http";
-import { jsonValueForType } from "./type-ref.js";
+import {
+  getPolymorphicVariants,
+  type PolymorphicInfo,
+  type PolymorphicVariant,
+} from "./discriminators.js";
+import {
+  jsonValueForPolymorphicVariant,
+  jsonValueForType,
+  scalarPlaceholder,
+  typeReference,
+  type SampleLocation,
+} from "./type-ref.js";
 import {
   applyRoutePrefix,
   asRecord,
@@ -84,11 +96,23 @@ export interface JsonExampleDoc {
 }
 
 /**
+ * One variant of a polymorphic body, chosen for a synthetic example.
+ */
+interface SelectedVariant {
+  /** The polymorphic body type. */
+  info: PolymorphicInfo;
+  /** The variant the example sends or returns. */
+  variant: PolymorphicVariant;
+}
+
+/**
  * Builds the list of operation example blocks for an operation page.
  *
  * When `@opExample` decorators are present, one block is emitted per decorator.
- * When none are present, a single synthetic example is generated from the
- * HTTP metadata (path parameters, query params, body, and response shapes).
+ * When none are present, synthetic examples are generated from the HTTP
+ * metadata (path parameters, query params, body, and response shapes): one
+ * per variant when the request or primary response body is polymorphic (see
+ * {@link buildSyntheticOperationExamples}), otherwise one.
  * Returns an empty array when there is no HTTP metadata and no explicit examples.
  *
  * @param program - The TypeSpec program.
@@ -118,13 +142,12 @@ export function operationExamples(
     );
   }
 
-  const fallbackExample = buildSyntheticOperationExample(
+  return buildSyntheticOperationExamples(
     program,
     operation,
     httpOperation,
     routePrefix,
   );
-  return fallbackExample ? [fallbackExample] : [];
 }
 
 /**
@@ -203,37 +226,114 @@ function buildOperationExample(
 }
 
 /**
- * Builds a synthetic {@link OperationExampleDoc} from HTTP metadata alone.
+ * Builds synthetic {@link OperationExampleDoc}s from HTTP metadata alone.
  *
- * Used when no `@opExample` decorators are present. Returns `undefined` when
- * there is no HTTP metadata (non-HTTP operations cannot produce a meaningful example).
+ * Used when no `@opExample` decorators are present. When the request body or
+ * the primary response body is polymorphic, one example is built per variant
+ * (titled e.g. `"Example 2: Cat"`), so every derived type has a payload a
+ * client can copy. When both are polymorphic, example *n* pairs the *n*th
+ * request variant with the *n*th response variant (`create(@body pet: Pet): Pet`
+ * sends and returns a `Cat` in the same example). Otherwise a single example is
+ * built. Returns an empty array when there is no HTTP metadata (non-HTTP
+ * operations cannot produce a meaningful example).
  *
  * @param program - The TypeSpec program.
  * @param operation - The TypeSpec operation.
  * @param httpOperation - The resolved HTTP operation, or `undefined`.
  * @param routePrefix - Optional route prefix for the request line.
  */
-function buildSyntheticOperationExample(
+function buildSyntheticOperationExamples(
   program: Program,
   operation: Operation,
   httpOperation: HttpOperation | undefined,
   routePrefix?: string,
-): OperationExampleDoc | undefined {
+): OperationExampleDoc[] {
   if (!httpOperation) {
-    return undefined;
+    return [];
   }
 
+  const description =
+    getSummary(program, operation) ?? getDoc(program, operation);
+  const requestBody = httpOperation.parameters.body;
+  const requestInfo =
+    requestBody?.bodyKind === "single"
+      ? getPolymorphicVariants(program, requestBody.type)
+      : undefined;
+  const responseBody = pickPrimaryResponse(httpOperation.responses)
+    ?.responses[0]?.body;
+  const responseInfo =
+    responseBody?.bodyKind === "single"
+      ? getPolymorphicVariants(program, responseBody.type)
+      : undefined;
+  const count = Math.max(
+    requestInfo?.variants.length ?? 1,
+    responseInfo?.variants.length ?? 1,
+  );
+
+  return Array.from({ length: count }, (_, index) => {
+    const requestVariant = selectVariant(requestInfo, index);
+    const responseVariant = selectVariant(responseInfo, index);
+    const label = (requestVariant ?? responseVariant)?.variant.type;
+    return {
+      title:
+        count > 1 && label
+          ? `Example ${index + 1}: ${typeReference(program, label)}`
+          : `Example ${index + 1}`,
+      description,
+      request: buildHttpRequestExample(
+        program,
+        httpOperation,
+        undefined,
+        routePrefix,
+        requestVariant,
+      ),
+      response: buildHttpResponseExample(
+        program,
+        httpOperation,
+        undefined,
+        responseVariant,
+      ),
+    };
+  });
+}
+
+/**
+ * Picks the variant of a polymorphic body for the example at `index`. When the
+ * body has fewer variants than there are examples, the last one repeats.
+ *
+ * @param info - The polymorphic body type, or `undefined` when not polymorphic.
+ * @param index - Zero-based example index.
+ */
+function selectVariant(
+  info: PolymorphicInfo | undefined,
+  index: number,
+): SelectedVariant | undefined {
+  if (!info) return undefined;
   return {
-    title: "Example 1",
-    description: getSummary(program, operation) ?? getDoc(program, operation),
-    request: buildHttpRequestExample(
-      program,
-      httpOperation,
-      undefined,
-      routePrefix,
-    ),
-    response: buildHttpResponseExample(program, httpOperation),
+    info,
+    variant: info.variants[Math.min(index, info.variants.length - 1)],
   };
+}
+
+/**
+ * Renders the JSON body for a selected variant of a polymorphic body.
+ *
+ * @param program - The TypeSpec program.
+ * @param selected - The polymorphic body and the variant to render.
+ * @param visibilityFilter - Optional HTTP visibility to filter model properties.
+ */
+function selectedVariantValue(
+  program: Program,
+  selected: SelectedVariant,
+  visibilityFilter?: Visibility,
+): unknown {
+  return jsonValueForPolymorphicVariant(
+    program,
+    selected.info,
+    selected.variant,
+    new Set<Type>([selected.info.type]),
+    visibilityFilter,
+  );
 }
 
 /**
@@ -256,12 +356,14 @@ function buildSyntheticOperationExample(
  * @param httpOperation - The resolved HTTP operation, or `undefined`.
  * @param parameterValues - Pre-resolved parameter values from `@opExample`, if any.
  * @param routePrefix - Optional route prefix to prepend.
+ * @param bodyVariant - The variant to send when the body is polymorphic.
  */
 function buildHttpRequestExample(
   program: Program,
   httpOperation: HttpOperation | undefined,
   parameterValues?: unknown,
   routePrefix?: string,
+  bodyVariant?: SelectedVariant,
 ): string {
   if (!httpOperation) {
     return "HTTP metadata is not available for this operation.";
@@ -291,12 +393,19 @@ function buildHttpRequestExample(
         httpOperation,
         sampleValues,
         visibilityFilter,
+        bodyVariant,
       )
     : undefined;
 
   lines.push(...headerLines);
 
-  if (body) {
+  // An explicit `@header contentType` parameter is already among the headers.
+  const declaresContentType = httpOperation.parameters.parameters.some(
+    (parameter) =>
+      parameter.type === "header" &&
+      parameter.name.toLowerCase() === "content-type",
+  );
+  if (body && !declaresContentType) {
     lines.push(`Content-Type: ${body.contentTypes[0] ?? "application/json"}`);
   }
 
@@ -320,11 +429,13 @@ function buildHttpRequestExample(
  * @param program - The TypeSpec program.
  * @param httpOperation - The resolved HTTP operation, or `undefined`.
  * @param responseValue - Pre-resolved response body from `@opExample`, if any.
+ * @param bodyVariant - The variant to return when the body is polymorphic.
  */
 function buildHttpResponseExample(
   program: Program,
   httpOperation: HttpOperation | undefined,
   responseValue?: unknown,
+  bodyVariant?: SelectedVariant,
 ): string | undefined {
   if (!httpOperation) {
     return responseValue === undefined
@@ -349,7 +460,7 @@ function buildHttpResponseExample(
       : splitResponseExampleValue(program, response, content, responseValue);
   const inferredValue =
     example === undefined
-      ? inferResponseBodyValue(program, content)
+      ? inferResponseBodyValue(program, content, bodyVariant)
       : example.body;
   const lines = [
     `HTTP/1.1 ${formatStatusCode(matched?.statusCode ?? response.statusCodes)}`,
@@ -358,7 +469,7 @@ function buildHttpResponseExample(
   for (const [name, property] of Object.entries(content?.headers ?? {})) {
     const value =
       example?.headers[property.name] ??
-      sampleValueForType(program, property.type);
+      sampleValueForType(program, property.type, property, "header");
     lines.push(`${name}: ${formatHeaderValue(value)}`);
   }
 
@@ -590,6 +701,8 @@ function resolveHttpParameterValues(
     resolvedValues[parameter.param.name] = sampleValueForType(
       program,
       parameter.param.type,
+      parameter.param,
+      parameter.type === "header" ? "header" : "query",
     );
   }
 
@@ -597,15 +710,27 @@ function resolveHttpParameterValues(
 }
 
 /**
- * Generates a representative sample value for a TypeSpec type.
+ * Generates a representative sample value for a parameter or header.
  *
- * Delegates to {@link jsonValueForType} with an empty visited set.
+ * A scalar goes through {@link scalarPlaceholder}, so the parameter's own
+ * `@encode` and constraints apply and a `utcDateTime` header uses RFC 7231.
+ * Anything else delegates to {@link jsonValueForType}.
  *
  * @param program - The TypeSpec program.
  * @param type - The type to sample.
+ * @param property - The parameter or header property, if any.
+ * @param location - Where the value travels.
  */
-function sampleValueForType(program: Program, type: Type): unknown {
-  return jsonValueForType(program, type, new Set<Type>());
+function sampleValueForType(
+  program: Program,
+  type: Type,
+  property?: ModelProperty,
+  location: SampleLocation = "body",
+): unknown {
+  if (type.kind === "Scalar") {
+    return scalarPlaceholder(program, type, property, location);
+  }
+  return jsonValueForType(program, type, new Set<Type>(), undefined, property);
 }
 
 /**
@@ -619,12 +744,14 @@ function sampleValueForType(program: Program, type: Type): unknown {
  * @param httpOperation - The resolved HTTP operation.
  * @param parameterValues - Resolved sample values from an `@opExample`, if any.
  * @param visibilityFilter - The HTTP verb visibility to apply when generating.
+ * @param bodyVariant - The variant to send when the body is polymorphic.
  */
 function extractRequestBodyValue(
   program: Program,
   httpOperation: HttpOperation,
   parameterValues?: unknown,
   visibilityFilter?: Visibility,
+  bodyVariant?: SelectedVariant,
 ): unknown {
   const body = httpOperation.parameters.body;
   if (!body) {
@@ -636,9 +763,12 @@ function extractRequestBodyValue(
     return values[body.property.name];
   }
 
-  return body.bodyKind === "single"
-    ? jsonValueForType(program, body.type, new Set<Type>(), visibilityFilter)
-    : undefined;
+  if (body.bodyKind !== "single") {
+    return undefined;
+  }
+  return bodyVariant
+    ? selectedVariantValue(program, bodyVariant, visibilityFilter)
+    : jsonValueForType(program, body.type, new Set<Type>(), visibilityFilter);
 }
 
 /**
@@ -649,18 +779,25 @@ function extractRequestBodyValue(
  *
  * @param program - The TypeSpec program.
  * @param responseContent - A single response content entry, or `undefined`.
+ * @param bodyVariant - The variant to return when the body is polymorphic.
  */
 function inferResponseBodyValue(
   program: Program,
   responseContent: HttpOperationResponse["responses"][number] | undefined,
+  bodyVariant?: SelectedVariant,
 ): unknown {
-  if (!responseContent?.body) {
+  if (responseContent?.body?.bodyKind !== "single") {
     return undefined;
   }
 
-  return responseContent.body.bodyKind === "single"
-    ? jsonValueForType(program, responseContent.body.type, new Set<Type>())
-    : undefined;
+  return bodyVariant
+    ? selectedVariantValue(program, bodyVariant, Visibility.Read)
+    : jsonValueForType(
+        program,
+        responseContent.body.type,
+        new Set<Type>(),
+        Visibility.Read,
+      );
 }
 
 /**

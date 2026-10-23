@@ -82,6 +82,112 @@ model Order extends EntityBase {
     @doc("The status of the order, e.g. placed, approved, delivered.")
     @visibility(Lifecycle.Read, Lifecycle.Update)
     status?: "placed" | "approved" | "delivered" = "placed";
+
+    @doc("How the customer pays for the order.")
+    paymentMethod?: PaymentMethod;
+}
+
+// Discriminated model hierarchy: the base leaves `channel` undeclared and each
+// derived model fixes its value. `PushNotification` only exists in v2.0.
+@doc("A notification sent to a customer. The `channel` property selects the delivery channel.")
+@discriminator("channel")
+model Notification {
+    @doc("The unique identifier of the notification.")
+    @visibility(Lifecycle.Read)
+    @format("uuid")
+    id: string;
+
+    @doc("Date and time when the notification was sent.")
+    @visibility(Lifecycle.Read)
+    sentDateTime: utcDateTime;
+}
+
+@doc("A notification delivered by email.")
+model EmailNotification extends Notification {
+    channel: "email";
+
+    @doc("The recipient's email address.")
+    @format("email")
+    to: string;
+
+    @doc("The email subject line.")
+    subject: string;
+}
+
+@doc("A notification delivered by SMS.")
+model SmsNotification extends Notification {
+    channel: "sms";
+
+    @doc("The recipient's phone number.")
+    @format("phone")
+    phoneNumber: string;
+
+    @doc("The text of the message.")
+    @maxLength(160)
+    message: string;
+}
+
+@doc("A push notification delivered to the customer's mobile device.")
+@added(Versions.v2_0)
+model PushNotification extends Notification {
+    channel: "push";
+
+    @doc("The device token issued by the push provider.")
+    deviceToken: string;
+
+    @doc("The notification title.")
+    title: string;
+}
+
+// Discriminated union without an envelope: `type` sits beside the variant's
+// own properties.
+@doc("A payment method. The `type` property selects the kind of payment.")
+@discriminated(#{ discriminatorPropertyName: "type", envelope: "none" })
+union PaymentMethod {
+    @doc("Payment by credit or debit card.")
+    card: CardPayment,
+
+    @doc("Payment by bank transfer.")
+    bankTransfer: BankTransferPayment,
+}
+
+@doc("Payment by credit or debit card.")
+model CardPayment {
+    @doc("The last four digits of the card number.")
+    last4: string;
+
+    @doc("The card expiry date, e.g. 08/29.")
+    expiry: string;
+}
+
+@doc("Payment by bank transfer.")
+model BankTransferPayment {
+    @doc("The International Bank Account Number to pay from.")
+    iban: string;
+}
+
+// Discriminated union with the default object envelope: each event is wrapped
+// as `{ "kind": "...", "value": { ... } }`.
+@doc("Something that happened to an order.")
+@discriminated
+union OrderEvent {
+    @doc("The order was placed.")
+    placed: OrderPlaced,
+
+    @doc("The order was shipped.")
+    shipped: OrderShipped,
+}
+
+@doc("The order was placed.")
+model OrderPlaced {
+    @doc("Date and time when the order was placed.")
+    placedDateTime: utcDateTime;
+}
+
+@doc("The order was shipped.")
+model OrderShipped {
+    @doc("The carrier's tracking number.")
+    trackingNumber: string;
 }
 
 @doc("Represents an individual item in an order, which corresponds to a specific pet being ordered.")

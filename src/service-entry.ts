@@ -3,7 +3,6 @@ import {
   getSummary,
   isArrayModelType,
   isErrorModel,
-  isRecordModelType,
   listServices,
   walkPropertiesInherited,
   type Enum,
@@ -23,7 +22,11 @@ import {
   collectOperations,
   collectTypes,
 } from "./collect.js";
+import { unionMemberships } from "./discriminators.js";
 import {
+  isCollectionModel,
+  isInDiscriminatedHierarchy,
+  isPlainRecordModel,
   isSameDeclaration,
   operationPayloadTypes,
   selectDocumentedTypes,
@@ -83,6 +86,15 @@ export interface OperationSummary extends RenderedDoc {
   containerLabel: string;
   /** Markdown type reference string for the return type. */
   returnType: string;
+}
+
+/**
+ * An {@link OperationSummary} for an operation that reaches a type only
+ * through a polymorphic type, such as `get(): Pet` on the page for `Dog`.
+ */
+export interface PolymorphicOperationSummary extends OperationSummary {
+  /** Markdown type reference string for the polymorphic type the operation uses. */
+  via: string;
 }
 
 /**
@@ -334,6 +346,17 @@ export function collectServiceEntry(
     operationPathById,
     typePathById,
   );
+  const documentedUnions = sortedTypes
+    .map((entry) => entry.type)
+    .filter((type): type is Union => type.kind === "Union");
+  const polymorphicMethodsByTypeId = buildPolymorphicMethodsByType(
+    program,
+    sortedTypes,
+    sortedOperations,
+    operationPathById,
+    typePathById,
+    documentedUnions,
+  );
 
   const resolvedRoutePrefix = routePrefix
     ? resolveRoutePrefixInternal(routePrefix, version?.value)
@@ -360,6 +383,10 @@ export function collectServiceEntry(
       typePathById,
       version?.value,
       resolvedApiName,
+      {
+        polymorphicMethods: polymorphicMethodsByTypeId.get(typeEntry.id),
+        unions: documentedUnions,
+      },
     ),
   }));
 
@@ -470,28 +497,163 @@ export function buildRelatedMethodsByType(
           operationEntry.httpOperation,
         ),
       )
-      .map((operationEntry) => ({
-        name: operationEntry.name,
-        title: operationEntry.name,
-        containerLabel: operationEntry.containerLabel,
-        returnType: buildOperationReturnType(
-          operationEntry.operation,
-          operationEntry.httpOperation,
+      .map((operationEntry) =>
+        typePageOperationSummary(
+          program,
+          operationEntry,
+          operationPathById,
           makeRef,
         ),
-        summary:
-          getSummary(program, operationEntry.operation) ??
-          getDoc(program, operationEntry.operation),
-        summaryOrFallback: describeSummary(program, operationEntry.operation),
-        path: operationPathById.has(operationEntry.id)
-          ? `../${operationPathById.get(operationEntry.id)}`
-          : "#",
-      }));
+      );
 
     relatedMethods.set(typeEntry.id, methods);
   }
 
   return relatedMethods;
+}
+
+/**
+ * Builds a map from type ID to the operations that reach the type only through
+ * a polymorphic type — a `@discriminator` base model (or an intermediate base
+ * within such a hierarchy), or a `@discriminated` union that lists the type as
+ * a variant. `get(): Pet` can return a `Dog`, so the `Dog` page lists `get`
+ * with `via` set to `Pet`.
+ *
+ * Operations that already use the type directly (see {@link operationUsesType})
+ * are left out. When an operation uses several such types, the nearest base
+ * model wins, then the first union.
+ *
+ * @param program - The TypeSpec program.
+ * @param types - All named types in the service, sorted by name.
+ * @param operations - All operations in the service, sorted by name, each with
+ *   its resolved HTTP operation when one is available.
+ * @param operationPathById - Map from operation entity ID to its relative file path.
+ * @param typePathById - Map from type entity ID to its relative file path.
+ * @param unions - The service's documented unions.
+ * @returns A map from type entity ID to its polymorphic operation summaries.
+ */
+export function buildPolymorphicMethodsByType(
+  program: Program,
+  types: Array<{
+    id: string;
+    name: string;
+    type: Model | Enum | Union | Scalar;
+  }>,
+  operations: Array<{
+    id: string;
+    name: string;
+    containerLabel: string;
+    operation: Operation;
+    httpOperation?: HttpOperation;
+  }>,
+  operationPathById: Map<string, string>,
+  typePathById: Map<string, string>,
+  unions: Union[],
+): Map<string, PolymorphicOperationSummary[]> {
+  const polymorphicMethods = new Map<string, PolymorphicOperationSummary[]>();
+
+  const makeRef = makeLinkedTypeRef(program, typePathById, (p) =>
+    p.replace(/^resources\//, ""),
+  );
+
+  for (const typeEntry of types) {
+    if (isErrorModel(program, typeEntry.type)) continue;
+    const carriers = polymorphicCarriers(program, typeEntry.type, unions);
+    if (carriers.length === 0) continue;
+
+    const methods: PolymorphicOperationSummary[] = [];
+    for (const operationEntry of operations) {
+      const { operation, httpOperation } = operationEntry;
+      if (
+        operationUsesType(program, operation, typeEntry.type, httpOperation)
+      ) {
+        continue;
+      }
+      const carrier = carriers.find((candidate) =>
+        operationUsesType(program, operation, candidate, httpOperation),
+      );
+      if (carrier) {
+        methods.push({
+          ...typePageOperationSummary(
+            program,
+            operationEntry,
+            operationPathById,
+            makeRef,
+          ),
+          via: makeRef(carrier),
+        });
+      }
+    }
+    polymorphicMethods.set(typeEntry.id, methods);
+  }
+
+  return polymorphicMethods;
+}
+
+/**
+ * Returns the polymorphic types whose payloads can carry `type`: each base
+ * model in a discriminated hierarchy (nearest first), then each
+ * `@discriminated` union in `unions` that lists `type` as a variant.
+ *
+ * @param program - The TypeSpec program.
+ * @param type - The type a payload may carry.
+ * @param unions - Candidate unions.
+ */
+function polymorphicCarriers(
+  program: Program,
+  type: Model | Enum | Union | Scalar,
+  unions: Union[],
+): Array<Model | Union> {
+  const carriers: Array<Model | Union> = [];
+  if (type.kind === "Model") {
+    for (let base = type.baseModel; base; base = base.baseModel) {
+      if (isInDiscriminatedHierarchy(program, base)) carriers.push(base);
+    }
+  }
+  for (const membership of unionMemberships(program, type, unions)) {
+    carriers.push(membership.info.type);
+  }
+  return carriers;
+}
+
+/**
+ * Builds the {@link OperationSummary} for an operation listed on a type page.
+ * Type pages live in `resources/`, so operation links get a `"../"` prefix.
+ *
+ * @param program - The TypeSpec program.
+ * @param operationEntry - The operation and its resolved HTTP metadata.
+ * @param operationPathById - Map from operation entity ID to its relative file path.
+ * @param makeRef - A type-reference function for Markdown links.
+ */
+function typePageOperationSummary(
+  program: Program,
+  operationEntry: {
+    id: string;
+    name: string;
+    containerLabel: string;
+    operation: Operation;
+    httpOperation?: HttpOperation;
+  },
+  operationPathById: Map<string, string>,
+  makeRef: (type: Type) => string,
+): OperationSummary {
+  return {
+    name: operationEntry.name,
+    title: operationEntry.name,
+    containerLabel: operationEntry.containerLabel,
+    returnType: buildOperationReturnType(
+      operationEntry.operation,
+      operationEntry.httpOperation,
+      makeRef,
+    ),
+    summary:
+      getSummary(program, operationEntry.operation) ??
+      getDoc(program, operationEntry.operation),
+    summaryOrFallback: describeSummary(program, operationEntry.operation),
+    path: operationPathById.has(operationEntry.id)
+      ? `../${operationPathById.get(operationEntry.id)}`
+      : "#",
+  };
 }
 
 /**
@@ -555,7 +717,7 @@ export function operationUsesType(
     if (
       paramType.kind === "Model" &&
       !isArrayModelType(program, paramType) &&
-      !isRecordModelType(program, paramType)
+      !isPlainRecordModel(program, paramType)
     ) {
       for (const nested of walkPropertiesInherited(paramType)) {
         if (typeDirectlyReferencesTarget(program, nested.type, target)) {
@@ -589,7 +751,7 @@ function typeDirectlyReferencesTarget(
 
   switch (type.kind) {
     case "Model": {
-      if (isArrayModelType(program, type) || isRecordModelType(program, type)) {
+      if (isCollectionModel(program, type)) {
         const elementType = arrayElementType(type);
         return elementType === target;
       }
