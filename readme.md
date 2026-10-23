@@ -210,7 +210,10 @@ JSON representations and generated examples use values a client can send as they
 - `@encode` changes the sample to match: `rfc7231` and `unixTimestamp` dates, `seconds` and `milliseconds` durations, `base64url` bytes, and `@encode(string)` on a boolean or number. It's read from the property first, then from the scalar's declaration chain.
 - A property with a declared default (`retries?: int32 = 3`) uses the default.
 - Properties are keyed by their JSON wire name, so `@encodedName("application/json", "display_label") label: string` appears as `display_label` in property tables and examples.
-- A model that accepts additional properties shows one as `"additionalProperty"`.
+- A model that accepts additional properties shows one as `"additionalProperty"` (or `"additionalProperty2"`, and so on, when a declared property already uses that name).
+- Arrays hold one item, or one per variant for a polymorphic item type, adjusted to `@minItems` / `@maxItems`.
+- A declared default, including `null`, is used as the sample, in the property's wire encoding (`@encode(string) active?: boolean = true` shows `"true"`).
+- A `@discriminator` property renamed with `@encodedName` is shown by its wire name.
 
 ## Discriminated types
 

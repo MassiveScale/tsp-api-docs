@@ -21,14 +21,13 @@ import {
   getMinValueExclusive,
   getPattern,
   isSecret,
-  serializeValueAsJson,
   type ModelProperty,
   type Program,
   type Scalar,
   type Type,
 } from "@typespec/compiler";
 import { isVisible, Visibility } from "@typespec/http";
-import { constraint, resolveEncode } from "./type-ref.js";
+import { constraint, defaultValueJson, resolveEncode } from "./type-ref.js";
 import { FALLBACK_SUMMARY } from "./utils.js";
 
 /** A property or parameter, or a scalar described on its own type page. */
@@ -159,7 +158,8 @@ function visibilityNote(
 }
 
 /**
- * Notes the property's declared default value, as JSON.
+ * Notes the property's declared default value, as JSON in its wire encoding
+ * (the same value examples show; see `defaultValueJson`).
  *
  * @param program - The TypeSpec program.
  * @param property - The property, or a scalar for its own type page.
@@ -169,19 +169,10 @@ function defaultNote(
   property: RuleTarget,
 ): string | undefined {
   if (property.kind !== "ModelProperty") return undefined;
-  if (!property.defaultValue) return undefined;
-  try {
-    const value = serializeValueAsJson(
-      program,
-      property.defaultValue,
-      property.type,
-    );
-    return value === undefined
-      ? undefined
-      : `Default: ${code(JSON.stringify(value))}.`;
-  } catch {
-    return undefined;
-  }
+  const value = defaultValueJson(program, property);
+  return value === undefined
+    ? undefined
+    : `Default: ${code(JSON.stringify(value))}.`;
 }
 
 /**

@@ -16,7 +16,9 @@ import {
   getDiscriminatedUnion,
   getDiscriminatedUnionFromInheritance,
   getDiscriminator,
+  resolveEncodedName,
   type Model,
+  type ModelProperty,
   type Program,
   type Type,
   type Union,
@@ -39,8 +41,16 @@ export interface PolymorphicVariant {
 export interface PolymorphicInfo {
   /** The polymorphic type: a `@discriminator` model or a `@discriminated` union. */
   type: Model | Union;
-  /** Wire name of the discriminator property, e.g. `"kind"`. */
+  /**
+   * JSON wire name of the discriminator property, e.g. `"kind"`, or its
+   * `@encodedName` for `application/json` when one is set.
+   */
   propertyName: string;
+  /**
+   * TypeSpec name of the discriminator property, for looking the property up
+   * on a model. Equal to {@link propertyName} unless it has an `@encodedName`.
+   */
+  logicalName: string;
   /**
    * `"none"` when the discriminator sits alongside the variant's own
    * properties (always the case for `@discriminator` models), or `"object"`
@@ -62,6 +72,12 @@ export interface DiscriminatorMembership {
   info: PolymorphicInfo;
   /** The discriminator value that selects the member. */
   value: string;
+  /**
+   * The variant that carries {@link value}: the member itself, or for a
+   * model, the ancestor on its branch that the polymorphic type lists (`Fish`
+   * for `Shark extends Fish extends Pet`).
+   */
+  variant: Type;
 }
 
 /**
@@ -83,13 +99,20 @@ export function getPolymorphicInfo(
     const discriminator = getDiscriminator(program, type);
     if (!discriminator) return undefined;
     const [union] = getDiscriminatedUnionFromInheritance(type, discriminator);
+    const variants = [...union.variants]
+      .filter(([, model]) => !isHttpEnvelopeModel(program, model))
+      .map(([value, model]) => ({ value, type: model }));
     return {
       type,
-      propertyName: discriminator.propertyName,
+      propertyName: discriminatorWireName(
+        program,
+        type,
+        variants,
+        discriminator.propertyName,
+      ),
+      logicalName: discriminator.propertyName,
       envelope: "none",
-      variants: [...union.variants]
-        .filter(([, model]) => !isHttpEnvelopeModel(program, model))
-        .map(([value, model]) => ({ value, type: model })),
+      variants,
     };
   }
 
@@ -99,6 +122,7 @@ export function getPolymorphicInfo(
     return {
       type,
       propertyName: union.options.discriminatorPropertyName,
+      logicalName: union.options.discriminatorPropertyName,
       envelope: union.options.envelope,
       envelopePropertyName:
         union.options.envelope === "object"
@@ -111,6 +135,50 @@ export function getPolymorphicInfo(
     };
   }
 
+  return undefined;
+}
+
+/**
+ * Returns the JSON wire name of a `@discriminator` property: the
+ * `@encodedName` of the property where the base (or one of its ancestors)
+ * declares it, otherwise where the first derived model declares it, otherwise
+ * the TypeSpec name itself.
+ *
+ * @param program - The TypeSpec program.
+ * @param base - The `@discriminator` model.
+ * @param variants - Its derived models.
+ * @param name - The discriminator's TypeSpec property name.
+ */
+function discriminatorWireName(
+  program: Program,
+  base: Model,
+  variants: PolymorphicVariant[],
+  name: string,
+): string {
+  const declared = [base, ...variants.map((variant) => variant.type)]
+    .filter((candidate): candidate is Model => candidate.kind === "Model")
+    .map((candidate) => findProperty(candidate, name))
+    .find((property) => property !== undefined);
+  return declared
+    ? resolveEncodedName(program, declared, "application/json")
+    : name;
+}
+
+/**
+ * Returns the property `name` declared on `model` or one of its bases.
+ *
+ * @param model - The model to search.
+ * @param name - The property's TypeSpec name.
+ */
+function findProperty(model: Model, name: string): ModelProperty | undefined {
+  for (
+    let current: Model | undefined = model;
+    current;
+    current = current.baseModel
+  ) {
+    const property = current.properties.get(name);
+    if (property) return property;
+  }
   return undefined;
 }
 
@@ -168,9 +236,11 @@ export function polymorphicTypesIn(
 
 /**
  * Returns the discriminated base models that select `model` by a
- * discriminator value, nearest base first. A model nested two levels deep
+ * discriminator value, nearest base first. Each base matches the variant on
+ * `model`'s own inheritance branch, so a model nested two levels deep
  * (`Shark extends Fish extends Pet`, where both bases carry `@discriminator`)
- * has one membership per level that names it.
+ * has one membership per level: `fishKind` = `"shark"` in `Fish`, and
+ * `kind` = `"fish"` in `Pet` through `Fish`.
  *
  * @param program - The TypeSpec program.
  * @param model - The derived model.
@@ -180,12 +250,17 @@ export function inheritanceMemberships(
   model: Model,
 ): DiscriminatorMembership[] {
   const memberships: DiscriminatorMembership[] = [];
+  // The models from `model` up to (not including) the base being checked.
+  const branch: Model[] = [model];
   for (let base = model.baseModel; base; base = base.baseModel) {
     const info = getPolymorphicInfo(program, base);
     const variant = info?.variants.find((candidate) =>
-      isSameDeclaration(candidate.type, model),
+      branch.some((member) => isSameDeclaration(candidate.type, member)),
     );
-    if (info && variant) memberships.push({ info, value: variant.value });
+    if (info && variant) {
+      memberships.push({ info, value: variant.value, variant: variant.type });
+    }
+    branch.push(base);
   }
   return memberships;
 }
@@ -209,7 +284,9 @@ export function unionMemberships(
     const variant = info?.variants.find((candidate) =>
       isSameDeclaration(candidate.type, type),
     );
-    if (info && variant) memberships.push({ info, value: variant.value });
+    if (info && variant) {
+      memberships.push({ info, value: variant.value, variant: variant.type });
+    }
   }
   return memberships;
 }

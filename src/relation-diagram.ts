@@ -76,7 +76,10 @@ export function buildRelationDiagram(
       const polymorphic = getPolymorphicInfo(program, type);
 
       if (base && inheritsInDiagram) {
-        const [membership] = inheritanceMemberships(program, type);
+        // Only a value that selects this model itself labels the line.
+        const membership = inheritanceMemberships(program, type).find(
+          (candidate) => candidate.variant === type,
+        );
         const label = membership
           ? `extends (${membership.info.propertyName} = ${membership.value})`
           : "extends";
@@ -118,7 +121,7 @@ export function buildRelationDiagram(
       // wire, after any discriminators inherited from further up.
       if (
         polymorphic &&
-        !properties.some((prop) => prop.name === polymorphic.propertyName)
+        !properties.some((prop) => prop.name === polymorphic.logicalName)
       ) {
         const inheritedDiscriminators = properties.filter((prop) =>
           discriminators.includes(prop.name),

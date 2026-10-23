@@ -1,9 +1,11 @@
 import {
   getEncode,
   getFormat,
+  getMaxItems,
   getMaxLength,
   getMaxValue,
   getMaxValueExclusive,
+  getMinItems,
   getMinLength,
   getMinValue,
   getMinValueExclusive,
@@ -317,19 +319,22 @@ export function jsonRepresentationForType(
         ) {
           continue;
         }
+        // A declared default (including `null`) wins over a generated sample.
+        const declaredDefault = defaultValueJson(program, property);
         jsonObject[jsonPropertyName(program, property)] =
-          defaultValueJson(program, property) ??
-          jsonValueForType(
-            program,
-            property.type,
-            visited,
-            visibilityFilter,
-            property,
-          );
+          declaredDefault !== undefined
+            ? declaredDefault
+            : jsonValueForType(
+                program,
+                property.type,
+                visited,
+                visibilityFilter,
+                property,
+              );
       }
       const additional = additionalPropertiesType(program, type);
       if (additional) {
-        jsonObject.additionalProperty = jsonValueForType(
+        jsonObject[additionalPropertyKey(program, type)] = jsonValueForType(
           program,
           additional,
           visited,
@@ -416,31 +421,39 @@ export function jsonValueForType(
       if (isArrayModelType(program, type)) {
         if (visited.has(type)) return [];
         const itemType = arrayElementType(type);
-        // A polymorphic array shows one item of every variant.
+        const { minItems, maxItems } = itemBounds(program, type, property);
+        // A polymorphic array shows one item of every variant that fits.
         const polymorphic = itemType
           ? getPolymorphicVariants(program, itemType)
           : undefined;
         if (polymorphic && itemType && !visited.has(itemType)) {
-          return polymorphic.variants.map((variant) =>
+          const count = itemCount(
+            polymorphic.variants.length,
+            minItems,
+            maxItems,
+          );
+          return Array.from({ length: count }, (_, index) =>
             jsonValueForPolymorphicVariant(
               program,
               polymorphic,
-              variant,
+              polymorphic.variants[index % polymorphic.variants.length],
               new Set(visited).add(type).add(itemType),
               visibilityFilter,
             ),
           );
         }
-        return [
-          itemType
-            ? jsonValueForType(
-                program,
-                itemType,
-                new Set(visited).add(type),
-                visibilityFilter,
-              )
-            : "unknown",
-        ];
+        const item = itemType
+          ? jsonValueForType(
+              program,
+              itemType,
+              new Set(visited).add(type),
+              visibilityFilter,
+            )
+          : "unknown";
+        return Array.from(
+          { length: itemCount(1, minItems, maxItems) },
+          () => item,
+        );
       }
       if (isPlainRecordModel(program, type)) {
         if (visited.has(type)) return {};
@@ -611,21 +624,103 @@ function encodesAsString(encode: EncodeData | undefined): boolean {
 }
 
 /**
+ * Returns the `@minItems` / `@maxItems` bounds of an array occurrence: the
+ * property's own first, then the array model's (`model Tags is string[]`).
+ *
+ * @param program - The TypeSpec program.
+ * @param array - The array model.
+ * @param property - The property the array came from, if any.
+ */
+function itemBounds(
+  program: Program,
+  array: Model,
+  property: ModelProperty | undefined,
+): { minItems?: number; maxItems?: number } {
+  return {
+    minItems:
+      (property && getMinItems(program, property)) ??
+      getMinItems(program, array),
+    maxItems:
+      (property && getMaxItems(program, property)) ??
+      getMaxItems(program, array),
+  };
+}
+
+/**
+ * Returns how many items a sample array holds: `preferred`, raised to
+ * `minItems` and capped at `maxItems`.
+ *
+ * @param preferred - The number of items the sample would like to show.
+ * @param minItems - The array's `@minItems`, if any.
+ * @param maxItems - The array's `@maxItems`, if any.
+ */
+function itemCount(
+  preferred: number,
+  minItems: number | undefined,
+  maxItems: number | undefined,
+): number {
+  let count = Math.max(preferred, minItems ?? 0);
+  if (maxItems !== undefined) count = Math.min(count, maxItems);
+  return Math.max(count, 0);
+}
+
+/**
+ * Returns the key that shows an additional property in a sample: the first of
+ * `additionalProperty`, `additionalProperty2`, ... that is not the JSON wire
+ * name of a declared property. Every declared property counts, including ones
+ * a visibility filter leaves out, so the sample never overwrites or
+ * reintroduces a declared field.
+ *
+ * @param program - The TypeSpec program.
+ * @param model - The model that accepts additional properties.
+ */
+function additionalPropertyKey(program: Program, model: Model): string {
+  const declared = new Set(
+    payloadProperties(program, model).map((property) =>
+      jsonPropertyName(program, property),
+    ),
+  );
+  let key = "additionalProperty";
+  for (let suffix = 2; declared.has(key); suffix++) {
+    key = `additionalProperty${suffix}`;
+  }
+  return key;
+}
+
+/**
  * Returns a property's declared default (`name: string = "Unnamed"`) as JSON,
  * or `undefined` when it has none or the default cannot be serialized. A
- * declared default is always a value the server accepts, so it makes a better
- * sample than a generic placeholder.
+ * declared `null` default is returned as `null`. A declared default is always
+ * a value the server accepts, so it makes a better sample than a generic
+ * placeholder.
+ *
+ * The default is serialized with the property's effective encoding: `@encode`
+ * on the property or its scalar applies, and a value whose encoding targets
+ * `string` (e.g. `@encode(string) active?: boolean = true`) becomes a string.
  *
  * @param program - The TypeSpec program.
  * @param property - The model property.
  */
-function defaultValueJson(program: Program, property: ModelProperty): unknown {
+export function defaultValueJson(
+  program: Program,
+  property: ModelProperty,
+): unknown {
   if (!property.defaultValue) return undefined;
   try {
-    return (
-      serializeValueAsJson(program, property.defaultValue, property.type) ??
-      undefined
+    // Passing the property applies its own `@encode` to scalar values.
+    const value = serializeValueAsJson(
+      program,
+      property.defaultValue,
+      property,
     );
+    const encode =
+      property.type.kind === "Scalar"
+        ? resolveEncode(program, property.type, property)
+        : getEncode(program, property);
+    return (typeof value === "boolean" || typeof value === "number") &&
+      encodesAsString(encode)
+      ? String(value)
+      : value;
   } catch {
     return undefined;
   }
@@ -786,12 +881,14 @@ function stringPlaceholder(
   type: Scalar,
   property: ModelProperty | undefined,
 ): string {
-  const format = constraint(program, type, property, getFormat);
-  if (format && SAMPLE_FORMATS[format.toLowerCase()]) {
-    return SAMPLE_FORMATS[format.toLowerCase()];
-  }
   const minLength = constraint(program, type, property, getMinLength);
   const maxLength = constraint(program, type, property, getMaxLength);
+  const format = constraint(program, type, property, getFormat);
+  const formatted = format
+    ? formatSample(format.toLowerCase(), minLength, maxLength)
+    : undefined;
+  if (formatted !== undefined) return formatted;
+
   let value = "string";
   if (minLength !== undefined && value.length < minLength) {
     value = value.padEnd(minLength, "s");
@@ -803,8 +900,84 @@ function stringPlaceholder(
 }
 
 /**
- * Returns `0`, moved inside the `@minValue` / `@maxValue` (and exclusive)
- * bounds that apply.
+ * Returns a sample for a string `@format` whose length is within
+ * `minLength`..`maxLength`, or `undefined` for a format with no known sample.
+ *
+ * The fixed sample (e.g. `user@example.com`) is used when it fits. Otherwise
+ * `email`, `uri` / `url` and `hostname` samples are built to the nearest
+ * fitting length, keeping the format valid; padding or cutting the fixed
+ * sample would not. Fixed-shape formats (`uuid`, dates, IP addresses) keep
+ * their sample, since no value of that format can meet a conflicting length.
+ *
+ * @param format - The `@format` value, lower-cased.
+ * @param minLength - The string's `@minLength`, if any.
+ * @param maxLength - The string's `@maxLength`, if any.
+ */
+function formatSample(
+  format: string,
+  minLength: number | undefined,
+  maxLength: number | undefined,
+): string | undefined {
+  const fixed = SAMPLE_FORMATS[format];
+  if (fixed === undefined) return undefined;
+  const fits = (value: string) =>
+    (minLength === undefined || value.length >= minLength) &&
+    (maxLength === undefined || value.length <= maxLength);
+  if (fits(fixed)) return fixed;
+
+  const target = Math.min(
+    Math.max(fixed.length, minLength ?? 0),
+    maxLength ?? Number.POSITIVE_INFINITY,
+  );
+  let built: string | undefined;
+  switch (format) {
+    case "email": {
+      const domain = "@ex.co";
+      const local = target - domain.length;
+      if (local >= 1) built = `${"u".repeat(local)}${domain}`;
+      break;
+    }
+    case "uri":
+    case "url": {
+      const origin = "https://ex.co";
+      if (target === origin.length) built = origin;
+      else if (target > origin.length) {
+        built = `${origin}/${"a".repeat(target - origin.length - 1)}`;
+      }
+      break;
+    }
+    case "hostname":
+      if (target >= 4) built = hostnameOfLength(target);
+      break;
+  }
+  return built !== undefined && fits(built) ? built : fixed;
+}
+
+/**
+ * Builds a valid host name of exactly `length` characters (at least 4),
+ * splitting it into DNS labels of at most 63 characters.
+ *
+ * @param length - The total length, including the `.co` suffix.
+ */
+function hostnameOfLength(length: number): string {
+  const labels: string[] = [];
+  let remaining = length - ".co".length;
+  while (remaining > 63) {
+    // Leave at least one character for the label after the dot.
+    const size = remaining === 64 ? 62 : 63;
+    labels.push("a".repeat(size));
+    remaining -= size + 1;
+  }
+  labels.push("a".repeat(remaining));
+  return `${labels.join(".")}.co`;
+}
+
+/**
+ * Returns a number inside every `@minValue` / `@maxValue` (and exclusive)
+ * bound that applies: `0` when it qualifies, otherwise the value nearest the
+ * lower bound (or upper bound, when there is no lower one). Integer scalars
+ * get an integer; when both ends are exclusive and close together, a
+ * non-integer scalar gets the midpoint.
  *
  * @param program - The TypeSpec program.
  * @param type - The numeric scalar (or a scalar derived from it).
@@ -815,31 +988,97 @@ function numericPlaceholder(
   type: Scalar,
   property: ModelProperty | undefined,
 ): number {
-  const min = constraint(program, type, property, getMinValue);
-  const minExclusive = constraint(
-    program,
-    type,
-    property,
-    getMinValueExclusive,
+  const lower = tighterBound(
+    constraint(program, type, property, getMinValue),
+    constraint(program, type, property, getMinValueExclusive),
+    "lower",
   );
-  const max = constraint(program, type, property, getMaxValue);
-  const maxExclusive = constraint(
-    program,
-    type,
-    property,
-    getMaxValueExclusive,
+  const upper = tighterBound(
+    constraint(program, type, property, getMaxValue),
+    constraint(program, type, property, getMaxValueExclusive),
+    "upper",
   );
+  const inside = (value: number) =>
+    (!lower ||
+      (lower.exclusive ? value > lower.value : value >= lower.value)) &&
+    (!upper || (upper.exclusive ? value < upper.value : value <= upper.value));
+  const integer = isIntegerScalar(type);
 
-  let value = 0;
-  if (min !== undefined && value < min) value = min;
-  if (minExclusive !== undefined && value <= minExclusive) {
-    value = minExclusive + 1;
+  const candidates: number[] = [0];
+  if (lower) {
+    candidates.push(
+      integer
+        ? lower.exclusive
+          ? Math.floor(lower.value) + 1
+          : Math.ceil(lower.value)
+        : lower.exclusive
+          ? lower.value + 1
+          : lower.value,
+    );
   }
-  if (max !== undefined && value > max) value = max;
-  if (maxExclusive !== undefined && value >= maxExclusive) {
-    value = maxExclusive - 1;
+  if (upper) {
+    candidates.push(
+      integer
+        ? upper.exclusive
+          ? Math.ceil(upper.value) - 1
+          : Math.floor(upper.value)
+        : upper.exclusive
+          ? upper.value - 1
+          : upper.value,
+    );
   }
-  return value;
+  if (lower && upper) {
+    const middle = (lower.value + upper.value) / 2;
+    candidates.push(integer ? Math.round(middle) : middle);
+  }
+  // No candidate fits only when the bounds conflict; show the lower bound.
+  return candidates.find(inside) ?? lower?.value ?? upper?.value ?? 0;
+}
+
+/**
+ * Combines an inclusive and an exclusive bound on the same side into the
+ * tighter one. On a tie, the exclusive bound is tighter.
+ *
+ * @param inclusive - The `@minValue` / `@maxValue`, if any.
+ * @param exclusive - The `@minValueExclusive` / `@maxValueExclusive`, if any.
+ * @param side - Whether these are lower or upper bounds.
+ */
+function tighterBound(
+  inclusive: number | undefined,
+  exclusive: number | undefined,
+  side: "lower" | "upper",
+): { value: number; exclusive: boolean } | undefined {
+  if (inclusive === undefined && exclusive === undefined) return undefined;
+  if (inclusive === undefined) return { value: exclusive!, exclusive: true };
+  if (exclusive === undefined) return { value: inclusive, exclusive: false };
+  const exclusiveIsTighter =
+    side === "lower" ? exclusive >= inclusive : exclusive <= inclusive;
+  return exclusiveIsTighter
+    ? { value: exclusive, exclusive: true }
+    : { value: inclusive, exclusive: false };
+}
+
+/**
+ * Returns `true` when `type` is, or derives from, an integer scalar
+ * (`integer`, `int*`, `uint*`, `safeint`).
+ *
+ * @param type - The numeric scalar.
+ */
+function isIntegerScalar(type: Scalar): boolean {
+  for (
+    let current: Scalar | undefined = type;
+    current;
+    current = current.baseScalar
+  ) {
+    if (
+      current.name === "integer" ||
+      current.name === "safeint" ||
+      /^u?int(8|16|32|64)?$/u.test(current.name)
+    ) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /**

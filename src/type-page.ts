@@ -436,7 +436,7 @@ function modelPropertyDocs(
   const docs = propertyDocs(program, properties, makeRef);
   const discriminators = new Set([
     ...discriminatorPropertyNames(program, model),
-    ...memberships.map((membership) => membership.info.propertyName),
+    ...memberships.map((membership) => membership.info.logicalName),
   ]);
 
   properties.forEach((property, index) => {
@@ -456,7 +456,7 @@ function modelPropertyDocs(
   if (polymorphic && polymorphic.envelope === "none") {
     const summary =
       "Discriminator that selects the concrete type. See Derived types.";
-    const doc = docs.find((d) => d.name === polymorphic.propertyName);
+    const doc = docs.find((d) => d.name === polymorphic.logicalName);
     if (!doc) {
       docs.unshift({
         name: polymorphic.propertyName,
