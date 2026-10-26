@@ -194,10 +194,24 @@ export const AZURE_DEVOPS_TOC = "[[_TOC_]]";
 const ATX_HEADING = /^ {0,3}(#{1,6})(?=\s|$)/;
 
 /**
- * Matches the opening line of a fenced block and captures its fence marker.
- * Includes the `:::` fence Azure DevOps Wiki uses for Mermaid diagrams.
+ * Matches the opening line of a fenced block, including one that starts on a
+ * list-item line (`- ```` ` or `1. ```` `). Captures the list-item prefix and
+ * the fence marker. Includes the `:::` fence Azure DevOps Wiki uses for
+ * Mermaid diagrams.
  */
-const FENCE_OPEN = /^ {0,3}(`{3,}|~{3,}|:{3,})/;
+const FENCE_OPEN =
+  /^((?: {0,3}(?:[-*+]|\d{1,9}[.)])[ \t]+)*) {0,3}(`{3,}|~{3,}|:{3,})/;
+
+/** Matches a line that holds only a fence marker, capturing its indentation and marker. */
+const FENCE_CLOSE = /^( *)(`{3,}|~{3,}|:{3,})[ \t]*\r?\n?$/;
+
+/** The fenced block a line belongs to while {@link formatAzureDevOpsPage} scans a page. */
+interface OpenFence {
+  /** The marker that opened the block (e.g. `` ``` `` or `:::`). */
+  marker: string;
+  /** The width of the list-item prefix before the opening marker, or `0`. */
+  contentIndent: number;
+}
 
 /**
  * Adapts a rendered Markdown page to Azure DevOps Wiki conventions.
@@ -232,7 +246,7 @@ export function formatAzureDevOpsPage(
     titleIndex !== -1 && ATX_HEADING.exec(lines[titleIndex])?.[1] === "#";
 
   const output: string[] = [];
-  let fence: string | undefined;
+  let fence: OpenFence | undefined;
   let tocPending = includeToc;
   for (
     let index = hasTitle ? titleIndex + 1 : 0;
@@ -246,7 +260,7 @@ export function formatAzureDevOpsPage(
       const fenceMatch = FENCE_OPEN.exec(line);
       const headingMatch = ATX_HEADING.exec(line);
       if (fenceMatch) {
-        fence = fenceMatch[1];
+        fence = { marker: fenceMatch[2], contentIndent: fenceMatch[1].length };
       } else if (headingMatch) {
         if (hasTitle && headingMatch[1].length > 1) {
           line = line.replace("#", "");
@@ -269,17 +283,21 @@ export function formatAzureDevOpsPage(
 }
 
 /**
- * Returns `true` when `line` closes a fenced block opened with `fence`: the
- * same character, repeated at least as many times, and nothing else.
+ * Returns `true` when `line` closes `fence`: the same character, repeated at
+ * least as many times, followed only by spaces or tabs. The marker may be
+ * indented at most three spaces past the list-item content the block belongs
+ * to; a marker indented further is still code.
  *
  * @param line - The candidate closing line.
- * @param fence - The marker that opened the block (e.g. `` ``` `` or `:::`).
+ * @param fence - The block that is open.
  */
-function isClosingFence(line: string, fence: string): boolean {
-  const trimmed = line.trim();
+function isClosingFence(line: string, fence: OpenFence): boolean {
+  const match = FENCE_CLOSE.exec(line);
   return (
-    trimmed.length >= fence.length &&
-    trimmed === fence[0].repeat(trimmed.length)
+    match !== null &&
+    match[1].length <= fence.contentIndent + 3 &&
+    match[2][0] === fence.marker[0] &&
+    match[2].length >= fence.marker.length
   );
 }
 

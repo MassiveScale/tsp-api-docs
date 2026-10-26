@@ -284,6 +284,59 @@ describe("formatAzureDevOpsPage", () => {
     );
   });
 
+  it("does not close a fence on a marker indented four or more spaces", () => {
+    const input = "# Title\n\n````\n    ````\n## Inside\n````\n\n## Outside\n";
+    assert.equal(
+      formatAzureDevOpsPage(input, true),
+      `\`\`\`\`\n    \`\`\`\`\n## Inside\n\`\`\`\`\n\n${AZURE_DEVOPS_TOC}\n\n# Outside\n`,
+    );
+  });
+
+  it("closes a fence on a marker followed by trailing whitespace", () => {
+    assert.equal(
+      formatAzureDevOpsPage(
+        "# Title\n\n```\n## Inside\n``` \t\n## Outside\n",
+        false,
+      ),
+      "```\n## Inside\n``` \t\n# Outside\n",
+    );
+  });
+
+  it("does not close a fence on a different marker character", () => {
+    assert.equal(
+      formatAzureDevOpsPage("# Title\n\n```\n~~~\n## Inside\n```\n", false),
+      "```\n~~~\n## Inside\n```\n",
+    );
+  });
+
+  for (const marker of ["-", "*", "+", "1.", "2)"]) {
+    it(`ignores headings inside a fence opened on a "${marker}" list item`, () => {
+      const indent = " ".repeat(marker.length + 1);
+      const input = `# Title\n\n${marker} \`\`\`md\n${indent}## Literal\n${indent}\`\`\`\n\n## Real\n`;
+      assert.equal(
+        formatAzureDevOpsPage(input, true),
+        `${marker} \`\`\`md\n${indent}## Literal\n${indent}\`\`\`\n\n${AZURE_DEVOPS_TOC}\n\n# Real\n`,
+      );
+    });
+  }
+
+  it("ignores headings inside a fence opened on a nested list item", () => {
+    const input = "# Title\n\n- - ```\n    ## Literal\n    ```\n\n## Real\n";
+    assert.equal(
+      formatAzureDevOpsPage(input, false),
+      "- - ```\n    ## Literal\n    ```\n\n# Real\n",
+    );
+  });
+
+  it("does not close a list-item fence on a marker indented past its content", () => {
+    const input =
+      "# Title\n\n- ```\n      ```\n  ## Literal\n  ```\n\n## Real\n";
+    assert.equal(
+      formatAzureDevOpsPage(input, false),
+      "- ```\n      ```\n  ## Literal\n  ```\n\n# Real\n",
+    );
+  });
+
   it("keeps each line's own line ending", () => {
     assert.equal(
       formatAzureDevOpsPage(
