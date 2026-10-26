@@ -7,3 +7,5 @@ options:
     format: "azure-devops"
     render-service-index: true
     emit-relation-diagram: true
+    azure-devops:
+      toc: true

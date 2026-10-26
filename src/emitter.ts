@@ -29,6 +29,7 @@ import {
   buildOperationsIndexModel,
   buildTypesIndexModel,
   cleanDocFiles,
+  formatAzureDevOpsPage,
   overviewFileName,
   rootIndexFileName,
   type OperationsIndexModel,
@@ -151,6 +152,7 @@ export async function $onEmit(context: EmitContext<ApiDocsEmitterOptions>) {
   const docfxEnablePdfTocPage = docfx?.["enable-pdf-toc-page"] ?? true;
   const docfxEmitJson = docfx?.["emit-json"] ?? true;
   const emitRelationDiagram = context.options["emit-relation-diagram"] ?? false;
+  const azureDevOpsToc = context.options["azure-devops"]?.toc ?? false;
 
   const templateOverrides = resolveTemplateOverrides(
     context.options["templates"],
@@ -206,30 +208,39 @@ export async function $onEmit(context: EmitContext<ApiDocsEmitterOptions>) {
     enablePdfTocPage: boolean;
   }>(templates.docfxProject);
 
+  /**
+   * Applies the output format's page conventions to rendered Markdown. Azure
+   * DevOps pages drop their in-body title and can gain a table of contents.
+   */
+  function finalizePage(markdown: string): string {
+    return format === "azure-devops"
+      ? formatAzureDevOpsPage(markdown, azureDevOpsToc)
+      : markdown;
+  }
   /** Renders the root service index and prettifies the resulting Markdown. */
   function renderServiceIndex(model: ServiceIndexModel): string {
-    return prettifyMarkdown(markdownIndex(model));
+    return finalizePage(prettifyMarkdown(markdownIndex(model)));
   }
   /** Renders an overview page and prettifies the resulting Markdown. */
   function renderOverview(model: OverviewPageModel): string {
-    return prettifyMarkdown(markdownOverview(model));
+    return finalizePage(prettifyMarkdown(markdownOverview(model)));
   }
   /** Renders an operation page and prettifies the resulting Markdown. */
   function renderOperation(model: OperationPageModel): string {
-    return prettifyMarkdown(markdownOperation(model));
+    return finalizePage(prettifyMarkdown(markdownOperation(model)));
   }
   /** Renders a type page (Model/Union/Scalar uses `type.hbs`; Enum uses `enum.hbs`). */
   function renderType(model: TypePageModel): string {
     const template = model.kind === "Enum" ? markdownEnum : markdownType;
-    return prettifyMarkdown(template(model));
+    return finalizePage(prettifyMarkdown(template(model)));
   }
   /** Renders an operations index page and prettifies the resulting Markdown. */
   function renderOperationsIndex(model: OperationsIndexModel): string {
-    return prettifyMarkdown(markdownOperationsIndex(model));
+    return finalizePage(prettifyMarkdown(markdownOperationsIndex(model)));
   }
   /** Renders a types index page and prettifies the resulting Markdown. */
   function renderTypesIndex(model: TypesIndexModel): string {
-    return prettifyMarkdown(markdownTypesIndex(model));
+    return finalizePage(prettifyMarkdown(markdownTypesIndex(model)));
   }
 
   if (context.options["clean-output-dir"] ?? true) {
@@ -387,7 +398,7 @@ export async function $onEmit(context: EmitContext<ApiDocsEmitterOptions>) {
     if (emitRelationDiagram) {
       await emitFile(program, {
         path: resolvePath(baseDir, "relation-diagram.md"),
-        content: buildRelationDiagram(program, service, format),
+        content: finalizePage(buildRelationDiagram(program, service, format)),
       });
     }
 

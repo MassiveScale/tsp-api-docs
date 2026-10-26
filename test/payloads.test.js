@@ -496,8 +496,8 @@ describe("payload type selection", () => {
     ]);
 
     const odd = result.outputs["fallback-api/api/Odd.md"];
-    assert.ok(!odd.includes("## HTTP request"));
-    assert.ok(odd.includes("## Parameters"));
+    assert.ok(!odd.includes("# HTTP request"));
+    assert.ok(odd.includes("# Parameters"));
     assert.match(
       odd,
       /\| mode +\| \[Mode\]\(\.\.\/resources\/Mode\.md\) +\| Yes +\|/,
@@ -682,15 +682,15 @@ describe("response headers", () => {
 
     const read = result.outputs["config-api/api/Widgets-Read.md"];
     const headersSection = read.slice(
-      read.indexOf("## Response headers"),
-      read.indexOf("## Examples"),
+      read.indexOf("# Response headers"),
+      read.indexOf("# Examples"),
     );
-    assert.ok(headersSection.includes("### 200 OK"));
+    assert.ok(headersSection.includes("## 200 OK"));
     assert.match(
       headersSection,
       /\| ETag +\| string +\| Yes +\| Concurrency token for the returned widget\. \|/,
     );
-    assert.ok(!headersSection.includes("### 404 Not Found"));
+    assert.ok(!headersSection.includes("## 404 Not Found"));
     assert.ok(
       !headersSection.includes(
         "This method does not return custom response headers.",
@@ -699,10 +699,10 @@ describe("response headers", () => {
     assert.ok(read.includes("HTTP/1.1 200 OK\nETag: string\nContent-Type"));
 
     const create = result.outputs["config-api/api/Widgets-Create.md"];
-    assert.ok(create.includes("### 201 Created"));
+    assert.ok(create.includes("## 201 Created"));
 
     const update = result.outputs["config-api/api/Widgets-Update.md"];
-    assert.ok(update.includes("### 204 No Content"));
+    assert.ok(update.includes("## 204 No Content"));
     assert.match(update, /HTTP\/1\.1 204 No Content\nETag: string\r?\n```/);
   });
 
@@ -808,7 +808,7 @@ describe("example responses", () => {
       .compile(statusSource);
 
     const read = result.outputs["status-api/api/Widgets-Read.md"];
-    const response = read.slice(read.indexOf("#### Response"));
+    const response = read.slice(read.indexOf("### Response"));
     assert.ok(response.includes("HTTP/1.1 404 Not Found"));
     assert.ok(response.includes('"title": "Missing"'));
     assert.ok(!response.includes("ETag"));
@@ -821,7 +821,7 @@ describe("example responses", () => {
       .compile(statusSource);
 
     const create = result.outputs["status-api/api/Widgets-Create.md"];
-    const response = create.slice(create.indexOf("#### Response"));
+    const response = create.slice(create.indexOf("### Response"));
     assert.ok(response.includes("HTTP/1.1 409 Conflict"));
     assert.ok(response.includes("x-reason: taken"));
     assert.ok(response.includes('"title": "Clash"'));
@@ -834,7 +834,7 @@ describe("example responses", () => {
       .compile(statusSource);
 
     const remove = result.outputs["status-api/api/Widgets-Remove.md"];
-    const response = remove.slice(remove.indexOf("#### Response"));
+    const response = remove.slice(remove.indexOf("### Response"));
     assert.ok(response.includes("HTTP/1.1 200 OK"));
   });
 });
@@ -915,18 +915,18 @@ describe("operation page polish", () => {
     const page = result.outputs["path-api/api/Widgets-Update.md"];
     assert.ok(page.includes("PATCH /api/widgets/{widget-key}"));
     assert.ok(page.includes("PATCH /api/widgets/string"));
-    assert.ok(page.includes("## Path parameters"));
+    assert.ok(page.includes("# Path parameters"));
     assert.match(
       page,
       /\| widget-key +\| string +\| Yes +\| The widget key\. \|/,
     );
-    assert.ok(page.includes("## Request cookies"));
+    assert.ok(page.includes("# Request cookies"));
     assert.match(page, /\| session +\| string +\| No +\|/);
     assert.match(page, /\| If-Match +\| string +\| No +\|/);
     assert.ok(!page.includes("ifMatch"));
     assert.ok(!page.includes("widgetKey"));
+    assert.ok(!page.includes("# Parameters"));
     assert.ok(!page.includes("## Parameters"));
-    assert.ok(!page.includes("### Parameters"));
   });
 
   it("omits the Path parameters and Request cookies sections when there are none", async () => {
@@ -943,8 +943,8 @@ describe("operation page polish", () => {
     `);
 
     const page = result.outputs["plain-api/api/Widgets-List.md"];
-    assert.ok(!page.includes("## Path parameters"));
-    assert.ok(!page.includes("## Request cookies"));
+    assert.ok(!page.includes("# Path parameters"));
+    assert.ok(!page.includes("# Request cookies"));
     assert.ok(
       page.includes("This method does not return custom response headers."),
     );

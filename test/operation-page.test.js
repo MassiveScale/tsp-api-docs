@@ -53,18 +53,18 @@ describe("operation page", () => {
     `);
 
     const operationPage = result.outputs["widget-api/api/Widgets-Update.md"];
-    assert.ok(operationPage.includes("# Widgets Update"));
-    assert.ok(operationPage.includes("## HTTP request"));
+    assert.doesNotMatch(operationPage, /^# Widgets Update$/m);
+    assert.ok(operationPage.includes("# HTTP request"));
     assert.ok(operationPage.includes("PATCH /api/widgets/{id}"));
-    assert.ok(operationPage.includes("## Request body"));
-    assert.ok(operationPage.includes("## Response"));
-    assert.ok(operationPage.includes("## Examples"));
-    assert.ok(operationPage.includes("#### Request"));
+    assert.ok(operationPage.includes("# Request body"));
+    assert.ok(operationPage.includes("# Response"));
+    assert.ok(operationPage.includes("# Examples"));
+    assert.ok(operationPage.includes("### Request"));
     assert.ok(operationPage.includes("PATCH /api/widgets/widget-123"));
     assert.ok(
       operationPage.includes("Content-Type: application/merge-patch+json"),
     );
-    assert.ok(operationPage.includes("#### Response"));
+    assert.ok(operationPage.includes("### Response"));
     assert.ok(operationPage.includes("HTTP/1.1 200 OK"));
     assert.ok(operationPage.includes('"id": "widget-123"'));
   });
@@ -91,13 +91,13 @@ describe("operation page", () => {
     `);
 
     const operationPage = result.outputs["widget-api/api/Widgets-Read.md"];
-    assert.ok(operationPage.includes("## Optional query parameters"));
+    assert.ok(operationPage.includes("# Optional query parameters"));
     assert.ok(
       operationPage.includes(
         "| expand | string | No       | No summary provided. |",
       ),
     );
-    assert.ok(operationPage.includes("## Request headers"));
+    assert.ok(operationPage.includes("# Request headers"));
     assert.ok(
       operationPage.includes(
         "| ConsistencyLevel | string | No       | No summary provided. |",
@@ -105,16 +105,16 @@ describe("operation page", () => {
     );
     assert.ok(operationPage.includes("GET /api/widgets/string?expand=string"));
     assert.ok(operationPage.includes("ConsistencyLevel: string"));
-    // Regression test: "## Response headers" must render regardless of
+    // Regression test: "# Response headers" must render regardless of
     // whether the operation has an @errorsDoc — it was previously nested
     // inside the {{#if errorsDoc}} block and never rendered for any operation.
-    assert.ok(operationPage.includes("## Response headers"));
+    assert.ok(operationPage.includes("# Response headers"));
     assert.ok(
       operationPage.includes(
         "This method does not return custom response headers.",
       ),
     );
-    assert.ok(!operationPage.includes("## Errors"));
+    assert.ok(!operationPage.includes("# Errors"));
   });
 
   it("renders @errorsDoc content under an Errors heading", async () => {
@@ -142,14 +142,14 @@ describe("operation page", () => {
     `);
 
     const operationPage = result.outputs["widget-api/api/Widgets-Read.md"];
-    assert.ok(operationPage.includes("## Errors"));
+    assert.ok(operationPage.includes("# Errors"));
     assert.ok(
       operationPage.includes(
         "Returns a 404 WidgetError when the widget does not exist.",
       ),
     );
     // Response headers should still render alongside the Errors section.
-    assert.ok(operationPage.includes("## Response headers"));
+    assert.ok(operationPage.includes("# Response headers"));
   });
 
   it("omits the Errors section when no @errorsDoc is present", async () => {
@@ -170,8 +170,8 @@ describe("operation page", () => {
     `);
 
     const operationPage = result.outputs["widget-api/api/Widgets-Read.md"];
-    assert.ok(!operationPage.includes("## Errors"));
-    assert.ok(operationPage.includes("## Response headers"));
+    assert.ok(!operationPage.includes("# Errors"));
+    assert.ok(operationPage.includes("# Response headers"));
   });
 
   describe("route-prefix option", () => {
@@ -320,7 +320,7 @@ describe("operation page", () => {
       `);
 
       const page = result.outputs["widget-api/api/Widgets-Read.md"];
-      assert.ok(page.includes("## External documentation"));
+      assert.ok(page.includes("# External documentation"));
       assert.ok(page.includes("[Full reference](https://example.com/docs)"));
     });
 
@@ -343,7 +343,7 @@ describe("operation page", () => {
       `);
 
       const page = result.outputs["widget-api/api/Widgets-Read.md"];
-      assert.ok(page.includes("## External documentation"));
+      assert.ok(page.includes("# External documentation"));
       assert.ok(
         page.includes("[https://example.com/docs](https://example.com/docs)"),
       );
@@ -367,7 +367,7 @@ describe("operation page", () => {
       `);
 
       const page = result.outputs["widget-api/api/Widgets-Read.md"];
-      assert.ok(!page.includes("## External documentation"));
+      assert.ok(!page.includes("# External documentation"));
     });
   });
 });

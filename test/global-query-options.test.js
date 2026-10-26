@@ -40,8 +40,8 @@ const commonQueryOptionsModel = `
 `;
 
 function querySection(page) {
-  const start = page.indexOf("## Optional query parameters");
-  const end = page.indexOf("## Request headers");
+  const start = page.indexOf("# Optional query parameters");
+  const end = page.indexOf("# Request headers");
   assert.ok(start >= 0 && end > start, "query section should be present");
   return page.slice(start, end);
 }

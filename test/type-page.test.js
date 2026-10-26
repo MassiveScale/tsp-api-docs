@@ -38,16 +38,16 @@ describe("type page", () => {
 
     const widgetListPage =
       result.outputs["relationship-api/resources/WidgetList.md"];
-    assert.ok(widgetListPage.includes("## Methods"));
+    assert.ok(widgetListPage.includes("# Methods"));
     assert.ok(widgetListPage.includes("| [list](../api/Widgets-List.md) |"));
-    assert.ok(widgetListPage.includes("## Properties"));
+    assert.ok(widgetListPage.includes("# Properties"));
     assert.ok(
       widgetListPage.includes(
         "| items | [Widget](Widget.md)[] | Yes      | No summary provided. |",
       ),
     );
-    assert.ok(!widgetListPage.includes("## Relationships"));
-    assert.ok(!widgetListPage.includes("### items"));
+    assert.ok(!widgetListPage.includes("# Relationships"));
+    assert.ok(!widgetListPage.includes("## items"));
     assert.ok(!widgetListPage.includes("| [read](api/Widgets-Read.md) |"));
     assert.ok(!widgetListPage.includes("| [create](api/Widgets-Create.md) |"));
 
@@ -115,7 +115,7 @@ describe("type page", () => {
     // @error types are cross-cutting envelopes, not addressable entities.
     const errorPage =
       result.outputs["error-test-api/resources/ErrorResponse.md"];
-    assert.ok(!errorPage.includes("## Methods"));
+    assert.ok(!errorPage.includes("# Methods"));
   });
 
   it("renders a plain boolean property as a native boolean in the example JSON", async () => {
@@ -184,7 +184,7 @@ describe("type page", () => {
       `);
 
       const widgetPage = result.outputs["widget-api/resources/Widget.md"];
-      assert.ok(widgetPage.includes("## External documentation"));
+      assert.ok(widgetPage.includes("# External documentation"));
       assert.ok(
         widgetPage.includes("[Full reference](https://example.com/docs)"),
       );
@@ -209,7 +209,7 @@ describe("type page", () => {
       `);
 
       const widgetPage = result.outputs["widget-api/resources/Widget.md"];
-      assert.ok(widgetPage.includes("## External documentation"));
+      assert.ok(widgetPage.includes("# External documentation"));
       assert.ok(
         widgetPage.includes(
           "[https://example.com/docs](https://example.com/docs)",
@@ -235,7 +235,7 @@ describe("type page", () => {
       `);
 
       const widgetPage = result.outputs["widget-api/resources/Widget.md"];
-      assert.ok(!widgetPage.includes("## External documentation"));
+      assert.ok(!widgetPage.includes("# External documentation"));
     });
 
     it("renders @externalDocs on a Union", async () => {
@@ -263,7 +263,7 @@ describe("type page", () => {
       `);
 
       const colorPage = result.outputs["widget-api/resources/Color.md"];
-      assert.ok(colorPage.includes("## External documentation"));
+      assert.ok(colorPage.includes("# External documentation"));
       assert.ok(
         colorPage.includes("[Color reference](https://example.com/docs/color)"),
       );
@@ -294,7 +294,7 @@ describe("type page", () => {
       `);
 
       const statusPage = result.outputs["widget-api/resources/Status.md"];
-      assert.ok(statusPage.includes("## External documentation"));
+      assert.ok(statusPage.includes("# External documentation"));
       assert.ok(
         statusPage.includes(
           "[Status reference](https://example.com/docs/status)",
@@ -323,7 +323,7 @@ describe("type page", () => {
       `);
 
       const widgetIdPage = result.outputs["widget-api/resources/WidgetId.md"];
-      assert.ok(widgetIdPage.includes("## External documentation"));
+      assert.ok(widgetIdPage.includes("# External documentation"));
       assert.ok(
         widgetIdPage.includes(
           "[WidgetId reference](https://example.com/docs/widgetid)",
@@ -350,7 +350,7 @@ describe("type page", () => {
       `);
 
       const widgetPage = result.outputs["widget-api/resources/Widget.md"];
-      assert.ok(widgetPage.includes("## External documentation"));
+      assert.ok(widgetPage.includes("# External documentation"));
       assert.ok(
         widgetPage.includes(
           "[Reference \\[full\\]](https://example.com/docs\\(v2\\))",
