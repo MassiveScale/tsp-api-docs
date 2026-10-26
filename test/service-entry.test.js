@@ -157,8 +157,8 @@ describe("service entry", () => {
       }
     `);
 
-    assert.ok(result.outputs["README.md"].includes("## Versioned Services"));
-    assert.ok(result.outputs["README.md"].includes("### Widget API"));
+    assert.ok(result.outputs["README.md"].includes("# Versioned Services"));
+    assert.ok(result.outputs["README.md"].includes("## Widget API"));
     // Version index links point to overview pages next to the version folders.
     assert.ok(
       result.outputs["README.md"].includes(
@@ -241,9 +241,7 @@ describe("service entry", () => {
         "type file should be under api-name folder",
       );
       assert.ok(
-        result.outputs["my-awesome-api/api/Get-Widget.md"].includes(
-          "## Errors",
-        ),
+        result.outputs["my-awesome-api/api/Get-Widget.md"].includes("# Errors"),
         "operation file should render @errorsDoc content",
       );
       assert.equal(
@@ -324,11 +322,11 @@ describe("service entry", () => {
 
       // Versions should be grouped under the api-name heading, not the service title.
       assert.ok(
-        result.outputs["README.md"].includes("### My Awesome API"),
+        result.outputs["README.md"].includes("## My Awesome API"),
         "index should group under api-name",
       );
       assert.ok(
-        !result.outputs["README.md"].includes("### Widget API"),
+        !result.outputs["README.md"].includes("## Widget API"),
         "index should not group under service title",
       );
     });
@@ -386,7 +384,7 @@ describe("service entry", () => {
       `);
 
       const overview = result.outputs["widget-api.md"];
-      assert.ok(overview.includes("## External documentation"));
+      assert.ok(overview.includes("# External documentation"));
       assert.ok(
         overview.includes("[Full reference](https://example.com/docs)"),
       );
@@ -409,7 +407,7 @@ describe("service entry", () => {
       `);
 
       const overview = result.outputs["widget-api.md"];
-      assert.ok(overview.includes("## External documentation"));
+      assert.ok(overview.includes("# External documentation"));
       assert.ok(
         overview.includes(
           "[https://example.com/docs](https://example.com/docs)",
@@ -433,7 +431,7 @@ describe("service entry", () => {
       `);
 
       const overview = result.outputs["widget-api.md"];
-      assert.ok(!overview.includes("## External documentation"));
+      assert.ok(!overview.includes("# External documentation"));
     });
   });
 });

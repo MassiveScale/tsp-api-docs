@@ -41,7 +41,7 @@ function jsonBlocks(page) {
  * parsed body.
  */
 function httpBlocks(page) {
-  const examples = page.split("## Examples")[1] ?? "";
+  const examples = page.split("# Examples")[1] ?? "";
   return [...examples.matchAll(/```http\n([\s\S]*?)\n```/g)].map((match) => {
     const [head, body] = match[1].split("\n\n");
     return { head, body: body === undefined ? undefined : JSON.parse(body) };

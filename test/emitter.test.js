@@ -45,11 +45,8 @@ describe("tsp-api-docs emitter", () => {
 
       assert.equal(result.outputs["index.md"], undefined);
       // Overview is at the same level as the widget-api/ folder (not inside it).
-      assert.ok(result.outputs["widget-api.md"].includes("## Resources"));
+      assert.match(result.outputs["widget-api.md"], /^# Resources$/m);
       assert.ok(result.outputs["widget-api.md"].includes("getWidget"));
-      assert.ok(
-        result.outputs["widget-api/api/Get-Widget.md"].includes("# Get Widget"),
-      );
       assert.ok(
         result.outputs["widget-api/api/Get-Widget.md"].includes(
           "Return a widget by id.",
@@ -61,7 +58,7 @@ describe("tsp-api-docs emitter", () => {
         ),
       );
       assert.ok(
-        result.outputs["widget-api/api/Get-Widget.md"].includes("## Errors"),
+        result.outputs["widget-api/api/Get-Widget.md"].includes("# Errors"),
       );
       assert.ok(
         result.outputs["widget-api/api/Get-Widget.md"].includes(
@@ -78,9 +75,7 @@ describe("tsp-api-docs emitter", () => {
         .compile(widgetSource);
 
       // Index files are at the same level as the folder they represent.
-      assert.ok(result.outputs["widget-api/api.md"].includes("# Operations"));
       assert.ok(result.outputs["widget-api/api.md"].includes("getWidget"));
-      assert.ok(result.outputs["widget-api/resources.md"].includes("# Types"));
       assert.ok(result.outputs["widget-api/resources.md"].includes("Widget"));
     });
 
@@ -102,6 +97,82 @@ describe("tsp-api-docs emitter", () => {
       assert.ok(
         result.outputs["README.md"].includes("[Widget API](widget-api.md)"),
       );
+    });
+
+    it("leaves the page title to the wiki and promotes section headings", async () => {
+      const result = await tester
+        .emit("@massivescale/tsp-api-docs", {
+          "render-service-index": true,
+        })
+        .compile(widgetSource);
+
+      const operation = result.outputs["widget-api/api/Get-Widget.md"];
+      assert.doesNotMatch(operation, /Get Widget/);
+      assert.ok(operation.startsWith("Return a widget by id."));
+      assert.match(operation, /^# Errors$/m);
+      assert.doesNotMatch(operation, /^## Errors$/m);
+      assert.ok(!operation.includes("Path:"));
+
+      const overview = result.outputs["widget-api.md"];
+      assert.doesNotMatch(overview, /^# Widget API$/m);
+      assert.match(overview, /^# Resources$/m);
+      assert.match(overview, /^# Methods$/m);
+
+      const type = result.outputs["widget-api/resources/Widget.md"];
+      assert.ok(type.startsWith("A widget returned by the service."));
+      assert.match(type, /^# Properties$/m);
+      assert.ok(!type.includes("Path:"));
+
+      assert.doesNotMatch(result.outputs["README.md"], /^# API Reference$/m);
+      assert.doesNotMatch(result.outputs["widget-api/api.md"], /^#/m);
+      assert.doesNotMatch(result.outputs["widget-api/resources.md"], /^#/m);
+    });
+
+    it("does not add a table of contents by default", async () => {
+      const result = await tester
+        .emit("@massivescale/tsp-api-docs")
+        .compile(widgetSource);
+
+      for (const content of Object.values(result.outputs)) {
+        assert.ok(!content.includes("[[_TOC_]]"));
+      }
+    });
+
+    it("places the table of contents immediately before the first section heading", async () => {
+      const result = await tester
+        .emit("@massivescale/tsp-api-docs", { "azure-devops": { toc: true } })
+        .compile(widgetSource);
+
+      const operation = result.outputs["widget-api/api/Get-Widget.md"];
+      assert.ok(operation.startsWith("Return a widget by id."));
+      assert.match(operation, /\n\[\[_TOC_\]\]\r?\n\r?\n# /);
+      assert.equal(operation.split("[[_TOC_]]").length, 2);
+      assert.ok(
+        operation.indexOf("[[_TOC_]]") < operation.search(/^# /m),
+        "the table of contents should precede the first heading",
+      );
+
+      const overview = result.outputs["widget-api.md"];
+      assert.match(overview, /\[\[_TOC_\]\]\r?\n\r?\n# Resources/);
+    });
+
+    it("omits the table of contents from pages without section headings", async () => {
+      const result = await tester
+        .emit("@massivescale/tsp-api-docs", {
+          "azure-devops": { toc: true },
+          "emit-relation-diagram": true,
+        })
+        .compile(widgetSource);
+
+      assert.ok(!result.outputs["widget-api/api.md"].includes("[[_TOC_]]"));
+      assert.ok(
+        !result.outputs["widget-api/resources.md"].includes("[[_TOC_]]"),
+      );
+
+      const diagram = result.outputs["widget-api/relation-diagram.md"];
+      assert.ok(diagram.startsWith(":::mermaid"));
+      assert.ok(!diagram.includes("Relation Diagram"));
+      assert.ok(!diagram.includes("[[_TOC_]]"));
     });
   });
 
@@ -160,9 +231,37 @@ describe("tsp-api-docs emitter", () => {
       );
       assert.equal(result.outputs["index.md"], undefined);
     });
+
+    it("keeps the page title and ignores the azure-devops toc option", async () => {
+      const result = await tester
+        .emit("@massivescale/tsp-api-docs", {
+          format: "github",
+          "azure-devops": { toc: true },
+        })
+        .compile(widgetSource);
+
+      const operation = result.outputs["widget-api/api/Get-Widget.md"];
+      assert.ok(operation.startsWith("# Get Widget"));
+      assert.match(operation, /^## Errors$/m);
+      assert.ok(!operation.includes("[[_TOC_]]"));
+    });
   });
 
   describe("docfx format", () => {
+    it("keeps the page title and ignores the azure-devops toc option", async () => {
+      const result = await tester
+        .emit("@massivescale/tsp-api-docs", {
+          format: "docfx",
+          "azure-devops": { toc: true },
+        })
+        .compile(widgetSource);
+
+      const operation = result.outputs["widget-api/api/Get-Widget.md"];
+      assert.ok(operation.startsWith("# Get Widget"));
+      assert.match(operation, /^## Errors$/m);
+      assert.ok(!operation.includes("[[_TOC_]]"));
+    });
+
     it("generates index.md and toc.yml for each service", async () => {
       const result = await tester
         .emit("@massivescale/tsp-api-docs", { format: "docfx" })

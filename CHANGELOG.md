@@ -20,9 +20,12 @@ This project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Property and parameter tables now state the rules a value must follow, after the `@doc` text: default value, read-only / write-only / set-on-create visibility, `#deprecated`, `@secret`, `@format`, `@minLength` / `@maxLength`, `@pattern`, `@minValue` / `@maxValue` (and exclusive forms), `@minItems` / `@maxItems`, and `@encode`. A scalar's page lists its own rules on a `Constraints:` line. See "Property rules" in the README.
   - Custom templates get `rules` and `description` on each property and parameter row, and `rules` on scalar type pages. The built-in templates show `description` in the Summary column; `summaryOrFallback` is unchanged, so custom templates keep their current output.
 - The `versioned-api` example now includes a discriminated model hierarchy (`Notification`, with `PushNotification` added in v2.0) and two discriminated unions (`PaymentMethod` without an envelope, `OrderEvent` with one).
+- `azure-devops: { toc: true }` adds the Azure DevOps Wiki `[[_TOC_]]` table of contents to each page, immediately before its first section heading. Off by default. See "Azure DevOps options" in the README.
 
 ### Changed
 
+- **Behavior change:** Azure DevOps pages no longer start with a `# Title` heading. The wiki already shows the page name as the title, so it appeared twice and pushed every section down a level. Every other heading now moves up one level (`## Request body` becomes `# Request body`). Pages rendered from custom templates that start with a `#` heading get the same treatment. The `github` and `docfx` formats are unchanged.
+- **Behavior change:** Operation, type, and enum pages no longer show the `Path:` breadcrumb line. Custom templates still receive `breadcrumbs`.
 - **Behavior change:** In the relation diagram, a model whose base is in the diagram now lists only its own properties and gets an `extends` line to its base, instead of repeating every inherited property.
 
 ### Fixed

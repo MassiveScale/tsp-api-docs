@@ -89,6 +89,22 @@ options:
 | `route-prefix`            | `string`                                    | `api/{version}`  | Prefix prepended to HTTP request paths. Supports `{version}` token substitution. See [Route Prefix](#route-prefix) below.                                                                                                                                                                                                            |
 | `templates`               | `TemplateOverrides`                         | —                | Per-template path overrides for custom Handlebars templates. See [Custom Templates](#custom-templates) below.                                                                                                                                                                                                                        |
 
+#### Azure DevOps options
+
+Azure DevOps Wiki options are nested under an `azure-devops:` key, which itself lives under `"@massivescale/tsp-api-docs"`. These are only applied when `format: azure-devops`.
+
+```yaml
+options:
+  "@massivescale/tsp-api-docs":
+    format: azure-devops
+    azure-devops:
+      toc: true
+```
+
+| Option | Type      | Default | Description                                                                                                                                                                                                                                                         |
+| ------ | --------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `toc`  | `boolean` | `false` | Adds the `[[_TOC_]]` table of contents macro to each page, immediately before its first section heading. Text above the first section, such as the summary and version, stays above the table of contents. Pages without section headings get no table of contents. |
+
 #### DocFx options
 
 DocFx-specific options are nested under a `docfx:` key, which itself lives under `"@massivescale/tsp-api-docs"`. These are only applied when `format: docfx`.
@@ -330,6 +346,8 @@ tsp-output/
     resources/
       <Type>.md
 ```
+
+Azure DevOps Wiki shows each page's name as its title, so pages in this format do not repeat it as a `#` heading. Every other heading moves up one level: a page's sections are `#` headings, and their subsections are `##`. Lines inside code blocks and `:::` blocks are left alone. This also applies to pages rendered from [custom templates](#custom-templates) that start with a `#` heading. Set `azure-devops: { toc: true }` to add a table of contents to each page (see [Azure DevOps options](#azure-devops-options)).
 
 ### `github`
 

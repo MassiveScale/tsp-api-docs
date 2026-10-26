@@ -29,6 +29,19 @@ export type TemplateName =
 export type TemplateOverrides = Partial<Record<TemplateName, string>>;
 
 /**
+ * Azure DevOps Wiki options nested under the `azure-devops:` key in
+ * `tspconfig.yaml`. These options are only meaningful when `format` is
+ * `"azure-devops"`.
+ */
+export interface AzureDevOpsOptions {
+  /**
+   * When `true`, each page gets the `[[_TOC_]]` table of contents macro,
+   * placed immediately before its first section heading. Defaults to `false`.
+   */
+  toc?: boolean;
+}
+
+/**
  * DocFx-specific options nested under the `docfx:` key in `tspconfig.yaml`.
  * These options are only meaningful when `format` is `"docfx"`.
  */
@@ -83,6 +96,12 @@ export interface ApiDocsEmitterOptions {
    * for versioned services it is combined with the version (e.g. `"My API v1.0"`).
    */
   "api-name"?: string;
+
+  /**
+   * Azure DevOps Wiki options. Only meaningful when `format` is
+   * `"azure-devops"`. See {@link AzureDevOpsOptions} for available sub-keys.
+   */
+  "azure-devops"?: AzureDevOpsOptions;
 
   /**
    * When `true` (default), the emitter deletes previously generated files
@@ -166,6 +185,15 @@ const optionsSchema = {
     "api-name": {
       type: "string",
       nullable: true,
+    },
+    "azure-devops": {
+      type: "object",
+      additionalProperties: false,
+      nullable: true,
+      properties: {
+        toc: { type: "boolean", nullable: true },
+      },
+      required: [],
     },
     "clean-output-dir": {
       type: "boolean",

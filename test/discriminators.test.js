@@ -156,7 +156,7 @@ describe("discriminated models", () => {
     const page = outputsOf(result)["pets-api/resources/Pet.md"];
 
     assert.match(page, /Discriminator: `kind`/);
-    assert.match(page, /## Derived types/);
+    assert.match(page, /# Derived types/);
     assert.match(page, /\| `"dog"` +\| \[Dog\]\(Dog\.md\) +\| A dog\. +\|/);
     assert.match(page, /\| `"cat"` +\| \[Cat\]\(Cat\.md\) +\| A cat\. +\|/);
     assert.match(page, /\| `"fish"` +\| \[Fish\]\(Fish\.md\) +\| A fish\. +\|/);
@@ -173,7 +173,7 @@ describe("discriminated models", () => {
       .compile(petSource);
     const page = outputsOf(result)["pets-api/resources/Pet.md"];
 
-    assert.match(page, /### Dog\n\n`kind`: `"dog"`/);
+    assert.match(page, /## Dog\n\n`kind`: `"dog"`/);
     const blocks = jsonBlocks(page);
     assert.deepEqual(
       blocks.map((block) => Object.keys(block)[0]),
@@ -201,7 +201,7 @@ describe("discriminated models", () => {
       page,
       /Discriminator value: `kind` = `"cat"` in \[Pet\]\(Pet\.md\)/,
     );
-    assert.match(page, /## Polymorphic methods/);
+    assert.match(page, /# Polymorphic methods/);
     for (const method of ["create", "list", "read"]) {
       assert.match(
         page,
@@ -226,9 +226,9 @@ describe("discriminated models", () => {
       .emit("@massivescale/tsp-api-docs")
       .compile(petSource);
     const page = outputsOf(result)["pets-api/resources/Dog.md"];
-    const polymorphic = page.split("## Polymorphic methods")[1].split("##")[0];
+    const polymorphic = page.split("# Polymorphic methods")[1].split("##")[0];
 
-    assert.match(page, /## Methods\n[\s\S]*\[createDog\]/);
+    assert.match(page, /# Methods\n[\s\S]*\[createDog\]/);
     assert.ok(!polymorphic.includes("createDog"));
   });
 
@@ -344,9 +344,9 @@ describe("operations with polymorphic payloads", () => {
       .compile(petSource);
     const page = outputsOf(result)["pets-api/api/Pets-Create.md"];
 
-    assert.match(page, /### Example 1: Dog/);
-    assert.match(page, /### Example 2: Cat/);
-    assert.match(page, /### Example 3: Fish/);
+    assert.match(page, /## Example 1: Dog/);
+    assert.match(page, /## Example 2: Cat/);
+    assert.match(page, /## Example 3: Fish/);
     const bodies = httpBodies(page);
     assert.deepEqual(
       bodies.map((body) => body.kind),
@@ -360,9 +360,7 @@ describe("operations with polymorphic payloads", () => {
       .emit("@massivescale/tsp-api-docs")
       .compile(petSource);
     const page = outputsOf(result)["pets-api/api/Pets-Create.md"];
-    const requestBody = page
-      .split("## Request body")[1]
-      .split("## Response")[0];
+    const requestBody = page.split("# Request body")[1].split("# Response")[0];
 
     assert.match(
       requestBody,
@@ -377,8 +375,8 @@ describe("operations with polymorphic payloads", () => {
       .compile(petSource);
     const page = outputsOf(result)["pets-api/api/Pets-List.md"];
 
-    assert.match(page, /### Example 1\n/);
-    assert.ok(!page.includes("### Example 2"));
+    assert.match(page, /## Example 1\n/);
+    assert.ok(!page.includes("## Example 2"));
     assert.deepEqual(
       httpBodies(page)[0].map((item) => item.kind),
       ["dog", "cat", "fish"],
@@ -394,7 +392,7 @@ describe("operations with polymorphic payloads", () => {
 
     assert.match(
       draw,
-      /## Polymorphic payloads\n\n- \[Shape\]\(\.\.\/resources\/Shape\.md\): `type` selects `"circle"` for \[Circle\]/,
+      /# Polymorphic payloads\n\n- \[Shape\]\(\.\.\/resources\/Shape\.md\): `type` selects `"circle"` for \[Circle\]/,
     );
     assert.deepEqual(
       httpBodies(draw).map((body) => body.type),

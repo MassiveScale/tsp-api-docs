@@ -187,6 +187,102 @@ function prefixRelativeMarkdownLinks(text: string, prefix: string): string {
   });
 }
 
+/** The Azure DevOps Wiki macro that renders a table of contents of the page's headings. */
+export const AZURE_DEVOPS_TOC = "[[_TOC_]]";
+
+/** Matches an ATX heading line and captures its run of `#` characters. */
+const ATX_HEADING = /^ {0,3}(#{1,6})(?=\s|$)/;
+
+/**
+ * Matches the opening line of a fenced block and captures its fence marker.
+ * Includes the `:::` fence Azure DevOps Wiki uses for Mermaid diagrams.
+ */
+const FENCE_OPEN = /^ {0,3}(`{3,}|~{3,}|:{3,})/;
+
+/**
+ * Adapts a rendered Markdown page to Azure DevOps Wiki conventions.
+ *
+ * Azure DevOps Wiki already shows the page name as its title, so a leading
+ * `# Title` heading would repeat it. When the first non-blank line is a
+ * level-1 heading, that line and the blank lines after it are removed, and
+ * every other heading is promoted one level (`##` becomes `#`, `###` becomes
+ * `##`). A page that does not start with a level-1 heading keeps its headings
+ * as they are.
+ *
+ * When `includeToc` is `true`, {@link AZURE_DEVOPS_TOC} is inserted on its own
+ * line immediately before the first remaining heading, so any summary text
+ * above the first section stays above the table of contents. A page with no
+ * headings gets no table of contents.
+ *
+ * Lines inside fenced blocks are never treated as headings.
+ *
+ * @param markdown - The rendered Markdown page.
+ * @param includeToc - When `true`, inserts the table of contents macro.
+ * @returns The adapted Markdown. Every line keeps its original line ending.
+ */
+export function formatAzureDevOpsPage(
+  markdown: string,
+  includeToc: boolean,
+): string {
+  // Built-in templates may be checked out with CRLF while generated content
+  // uses LF, so each line keeps its own terminator instead of being re-joined.
+  const lines = markdown.split(/(?<=\n)/);
+  const titleIndex = lines.findIndex((line) => line.trim() !== "");
+  const hasTitle =
+    titleIndex !== -1 && ATX_HEADING.exec(lines[titleIndex])?.[1] === "#";
+
+  const output: string[] = [];
+  let fence: string | undefined;
+  let tocPending = includeToc;
+  for (
+    let index = hasTitle ? titleIndex + 1 : 0;
+    index < lines.length;
+    index++
+  ) {
+    let line = lines[index];
+    if (fence) {
+      if (isClosingFence(line, fence)) fence = undefined;
+    } else {
+      const fenceMatch = FENCE_OPEN.exec(line);
+      const headingMatch = ATX_HEADING.exec(line);
+      if (fenceMatch) {
+        fence = fenceMatch[1];
+      } else if (headingMatch) {
+        if (hasTitle && headingMatch[1].length > 1) {
+          line = line.replace("#", "");
+        }
+        if (tocPending) {
+          const eol = line.endsWith("\r\n") ? "\r\n" : "\n";
+          output.push(AZURE_DEVOPS_TOC + eol, eol);
+          tocPending = false;
+        }
+      }
+    }
+    output.push(line);
+  }
+
+  if (hasTitle) {
+    const firstContent = output.findIndex((line) => line.trim() !== "");
+    output.splice(0, firstContent === -1 ? output.length : firstContent);
+  }
+  return output.join("");
+}
+
+/**
+ * Returns `true` when `line` closes a fenced block opened with `fence`: the
+ * same character, repeated at least as many times, and nothing else.
+ *
+ * @param line - The candidate closing line.
+ * @param fence - The marker that opened the block (e.g. `` ``` `` or `:::`).
+ */
+function isClosingFence(line: string, fence: string): boolean {
+  const trimmed = line.trim();
+  return (
+    trimmed.length >= fence.length &&
+    trimmed === fence[0].repeat(trimmed.length)
+  );
+}
+
 /** Wraps a YAML scalar value in double quotes, escaping any internal double quotes. */
 function yamlString(value: string): string {
   return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;

@@ -67,7 +67,7 @@ describe("discriminator renamed with @encodedName", () => {
     assert.match(page, /Discriminator: `pet_type`/);
     assert.match(page, /\| `pet_type` +\| Type +\| Summary +\|/);
     assert.match(page, /^\| pet_type +\|/m);
-    assert.ok(!/\bkind\b/.test(page.split("## Properties")[1]));
+    assert.ok(!/\bkind\b/.test(page.split("# Properties")[1]));
   });
 });
 

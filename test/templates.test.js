@@ -57,7 +57,7 @@ describe("custom templates", () => {
     );
     // Built-in content like the operations table should not appear.
     assert.ok(
-      !overview.includes("## Operations"),
+      !overview.includes("# Operations"),
       "built-in sections should not appear",
     );
   });
@@ -71,17 +71,11 @@ describe("custom templates", () => {
 
     // Operation pages should still use the built-in template.
     assert.ok(
-      result.outputs["widget-api/api/Get-Widget.md"].includes("# Get Widget"),
-      "built-in operation template should still be used",
-    );
-    assert.ok(
-      result.outputs["widget-api/api/Get-Widget.md"].includes("## Errors"),
+      result.outputs["widget-api/api/Get-Widget.md"].includes("# Errors"),
       "built-in operation template should still render @errorsDoc content",
     );
     assert.ok(
-      result.outputs["widget-api/resources/Widget.md"].includes(
-        "## Properties",
-      ),
+      result.outputs["widget-api/resources/Widget.md"].includes("# Properties"),
       "built-in type template should still be used",
     );
   });
